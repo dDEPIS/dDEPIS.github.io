@@ -11,7 +11,7 @@ draft: false
 
 ## Overview
 
-This project started as a request from an artist to try implementing a vectorscope as a plugin for UE. It eventually evolved to also include a histogram and a waveform, tools which can be found in lots of production tools. 
+This is an Unreal Engine Plugin that provides a vectorscope, a histogram and a waveform, tools which are available by default in lots of other production software. 
 
 All those tools could prove useful in the production pipeline, helping artists get objective insights into the colorization of a scene, without having to exit UE.
 

@@ -1,21 +1,21 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Project on Bogdan Deparateanu</title>
+    <title>Project on DEPIS</title>
     <link>http://localhost:1313/tags/project/</link>
-    <description>Recent content in Project on Bogdan Deparateanu</description>
+    <description>Recent content in Project on DEPIS</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
-    <managingEditor>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</managingEditor>
-    <webMaster>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</webMaster>
-    <copyright>© 2026 Bogdan Depărățeanu</copyright>
+    <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
+    <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
+    <copyright>© 2026 DEPIS</copyright>
     <lastBuildDate>Wed, 06 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/tags/project/index.xml" rel="self" type="application/rss+xml" />
     
     <item>
       <title>UE Color Tools </title>
       <link>http://localhost:1313/articles/uecolortoolsarticle/</link>
       <pubDate>Wed, 06 Aug 2025 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/articles/uecolortoolsarticle/</guid>
       <description></description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/uecolortoolsarticle/cover.png" />
@@ -25,7 +25,7 @@
       <title>UE Color Tools Plugin</title>
       <link>http://localhost:1313/projects/ue5colortools/</link>
       <pubDate>Wed, 06 Aug 2025 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/ue5colortools/</guid>
       <description>Work in Progress&amp;hellip; - UE5 plugin providing 3 color inspection tools (vectorscope, histogram, waveform)</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/ue5colortools/cover.png" />
@@ -35,7 +35,7 @@
       <title>My contribution to Umbra Mortis</title>
       <link>http://localhost:1313/rabbithole/umbramortiswork/</link>
       <pubDate>Sun, 06 Jul 2025 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/rabbithole/umbramortiswork/</guid>
       <description>Multiplayer zombie FPS made in UE5</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/umbramortiswork/cover.jpg" />
@@ -45,7 +45,7 @@
       <title>Umbra Mortis</title>
       <link>http://localhost:1313/projects/umbramortis/</link>
       <pubDate>Sun, 06 Jul 2025 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/umbramortis/</guid>
       <description>Multiplayer zombie FPS made in UE5</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/umbramortis/cover.jpg" />
@@ -55,7 +55,7 @@
       <title>PEPI Engine Renderer </title>
       <link>http://localhost:1313/rabbithole/pepirenderer/</link>
       <pubDate>Wed, 04 Sep 2024 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/rabbithole/pepirenderer/</guid>
       <description>DX12/DXR renderer built specifically for RTS games</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/pepirenderer/cover.png" />
@@ -65,7 +65,7 @@
       <title>Owlet / PEPI engine</title>
       <link>http://localhost:1313/projects/owlet/</link>
       <pubDate>Mon, 01 Jul 2024 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/owlet/</guid>
       <description>RTS game made using the PEPI custom engine</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/owlet/cover.png" />
@@ -75,7 +75,7 @@
       <title>DXR Hybrid Ray tracer</title>
       <link>http://localhost:1313/projects/hybridraytracer/</link>
       <pubDate>Mon, 04 Dec 2023 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/hybridraytracer/</guid>
       <description>A hybrid ray tracer built with DXR</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/hybridraytracer/cover.png" />
@@ -85,7 +85,7 @@
       <title>Implementing a Hybrid Ray Tracer with DXR</title>
       <link>http://localhost:1313/articles/hybridrtarticle/</link>
       <pubDate>Mon, 04 Dec 2023 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/articles/hybridrtarticle/</guid>
       <description>A cool project I made</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/hybridrtarticle/cover.png" />
@@ -95,7 +95,7 @@
       <title>2D Ray Tracer</title>
       <link>http://localhost:1313/projects/2draytracer/</link>
       <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/2draytracer/</guid>
       <description>2D Ray-Tracing renderer</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/2draytracer/cover.png" />
@@ -105,7 +105,7 @@
       <title>Galactic Goo </title>
       <link>http://localhost:1313/projects/galacticgoo/</link>
       <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/galacticgoo/</guid>
       <description>Puzzle-platform game made with UE5</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/galacticgoo/cover.png" />
@@ -115,7 +115,7 @@
       <title>My contribution on Galactic Goo </title>
       <link>http://localhost:1313/rabbithole/galacticgoowork/</link>
       <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/rabbithole/galacticgoowork/</guid>
       <description></description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/galacticgoowork/cover.png" />
@@ -125,7 +125,7 @@
       <title>2D RTS</title>
       <link>http://localhost:1313/projects/2drts/</link>
       <pubDate>Sun, 04 Sep 2022 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/2drts/</guid>
       <description>2D RTS tank game</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/2drts/cover.png" />
@@ -135,7 +135,7 @@
       <title>3D RTS</title>
       <link>http://localhost:1313/projects/3drts/</link>
       <pubDate>Sun, 04 Sep 2022 00:00:00 +0000</pubDate>
-      <author>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</author>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/3drts/</guid>
       <description>3D RTS tank game on a raspbery PI</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/3drts/cover.png" />

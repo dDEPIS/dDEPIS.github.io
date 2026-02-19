@@ -2,7 +2,7 @@ disabled = false
 languageCode = "en"
 languageName = "English"
 weight = 1
-title = "Bogdan Deparateanu"
+title = "DEPIS"
 
 [params]
   displayName = "EN"
@@ -15,14 +15,14 @@ title = "Bogdan Deparateanu"
   # copyright = "Copy, _right?_ :thinking_face:"
 
  [params.author]
-   name = "Bogdan Depărățeanu"
-   email = "bogdandeparateanu@gmail.com"
+   name = "DEPIS"
+   email = "ddepis.d@gmail.com"
    image = "https://avatars.githubusercontent.com/u/101334730?s=400&u=01c57c4cf13c19dbcaf66d57b1ff296bb416833d&v=4"
    imageQuality = 96
    headline = "A slightly confused person."
    bio = "Professional Dumbass"
-#   links = [
-#     { email = "mailto:hello@your_domain.com" },
+   links = [
+     { email = "mailto:ddepis.d@gmail.com" },
 #     { link = "https://link-to-some-website.com/" },
 #     { amazon = "https://www.amazon.com/hz/wishlist/ls/wishlist-id" },
 #     { apple = "https://www.apple.com" },
@@ -35,7 +35,7 @@ title = "Bogdan Deparateanu"
 #     { facebook = "https://facebook.com/username" },
 #     { flickr = "https://www.flickr.com/photos/username/" },
 #     { foursquare = "https://foursquare.com/username" },
-#     { github = "https://github.com/username" },
+     { github = "https://github.com/dDEPIS" },
 #     { gitlab = "https://gitlab.com/username" },
 #     { google = "https://www.google.com/" },
 #     { hashnode = "https://username.hashnode.dev" },
@@ -71,6 +71,6 @@ title = "Bogdan Deparateanu"
 #     { x-twitter = "https://twitter.com/username" },
 #     { whatsapp = "https://wa.me/phone-number" },
 #     { youtube = "https://youtube.com/username" },
-#     { ko-fi = "https://ko-fi.com/username" },
+      { ko-fi = "https://ko-fi.com/depis" },
 #     { codeberg = "https://codeberg.org/username"},
-#   ]
+   ]

@@ -1,14 +1,14 @@
 <?xml version="1.0" encoding="utf-8" standalone="yes"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
-    <title>Authors on Bogdan Deparateanu</title>
+    <title>Authors on DEPIS</title>
     <link>http://localhost:1313/authors/</link>
-    <description>Recent content in Authors on Bogdan Deparateanu</description>
+    <description>Recent content in Authors on DEPIS</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
-    <managingEditor>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</managingEditor>
-    <webMaster>bogdandeparateanu@gmail.com (Bogdan Depărățeanu)</webMaster>
-    <copyright>© 2026 Bogdan Depărățeanu</copyright>
+    <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
+    <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
+    <copyright>© 2026 DEPIS</copyright>
     <atom:link href="http://localhost:1313/authors/index.xml" rel="self" type="application/rss+xml" />
     
   </channel>
