@@ -30,6 +30,6 @@ The plugin is now available on FAB, and it is free for personal use. You can fin
 
 # Implementation
 
-Coming soon...
+{{< article link="/articles/UEColorToolsArticle/" showSummary=true compactSummary=true >}}
 
 
