@@ -11,7 +11,7 @@ draft: false
 
 # UE Color Tools Implementation
  
-This is a writeup of how I built **UEColorTools**, a real-time vectorscope, histogram, and waveform monitor that lives inside the Unreal Engine 5 editor. It uses compute shaders and the Render Dependency Graph (RDG) to sample the viewport every frame and draw broadcast-style scopes into Slate widgets.
+This is a writeup of how I built **UEColorTools**, a real-time vectorscope, histogram, and waveform monitor that runs inside the Unreal Engine 5 editor. It uses compute shaders and the Render Dependency Graph (RDG) to sample the viewport every frame and draw broadcast style scopes into Slate widgets.
  
 The reason I wanted to write this down is that maybe half of what I had to figure out is not really documented anywhere I could find. The UE source code is the documentation, and even that takes a lot of staring at to make sense of. So this article is mostly a record of the non-obvious things.
  
@@ -19,9 +19,9 @@ The reason I wanted to write this down is that maybe half of what I had to figur
  
 ## Using the Scene View Extension
  
-The `FSceneViewExtension` is Unreal's official way to inject your own work into the rendering pipeline without forking the engine. You inherit from `FSceneViewExtensionBase`, override the hooks you care about, and the engine calls your code on the render thread at the right moments. So far so good, this is in the engine source comments.
+The `FSceneViewExtension` is Unreal's official way to inject your own work into the rendering pipeline without forking the engine. You inherit from `FSceneViewExtensionBase`, override the hooks you care about, and the engine calls your code on the render thread at the right moments.
  
-What is **not** obvious is how you keep one alive. A view extension is reference counted, so if nothing holds onto it, it dies the moment you create it. I solved this with an `UEngineSubsystem`:
+A view extension is reference counted, so if nothing holds onto it, it dies the moment you create it. I solved this with an `UEngineSubsystem`:
  
 ```cpp
 void UUEColorToolsSubsystem::Initialize(FSubsystemCollectionBase& Collection)
@@ -38,7 +38,7 @@ void UUEColorToolsSubsystem::Deinitialize()
 }
 ```
  
-`FSceneViewExtensions::NewExtension<T>()` registers the extension with the engine and hands you back a `TSharedPtr`. The subsystem holds it for the lifetime of the editor. That's the trick.
+`FSceneViewExtensions::NewExtension<T>()` registers the extension with the engine and hands you back a `TSharedPtr`. The subsystem holds it for the lifetime of the editor.
  
 An important note:  **the signature of `SubscribeToPostProcessingPass` changed between 5.3 and 5.4**. In 5.3 it was:
  
@@ -87,7 +87,7 @@ enum class EPostProcessingPass : uint32 {
  
 This choice actually matters a lot for scopes. A vectorscope or a waveform is supposed to tell you what the viewer is going to *see*, that is, display-referred values after tonemapping. If I hooked into something pre-tonemap, I would be measuring HDR scene radiance, which has a completely different range and shape and would make the scopes useless for color grading.
  
-So I hook **after FXAA**, which sits past Tonemap in the chain. The colors I sample are already in the 0–1 display range:
+So I hook **after FXAA**, which sits past Tonemap in the chain. The colors I sample are already in the 0-1 display range:
  
 ```cpp
 if (InPass == EPostProcessingPass::FXAA)
@@ -111,7 +111,7 @@ FScreenPassTexture SceneColorTexture(SceneColorSlice);
 if (!SceneColorTexture.IsValid() ||
     !EnumHasAnyFlags(SceneColorTexture.Texture->Desc.Flags, TexCreate_ShaderResource))
 {
-    return; // SRV flag missing — cannot create a shader resource view
+    return; // SRV flag missing - cannot create a shader resource view
 }
  
 FRDGTextureSRVRef SceneColorSRV = GraphBuilder.CreateSRV(SceneColorTexture.Texture);
@@ -211,7 +211,7 @@ One last shader thing: `OutEnvironment.CompilerFlags.Add(CFLAG_AllowTypedUAVLoad
  
 The math underneath all three scopes is Rec. 709 luminance and chrominance. From the tonemapped scene color:
  
-- **Luma (Y'):**  `Y' = 0.2126·R + 0.7152·G + 0.0722·B`
+- **Luma (Y'):**  `Y' = 0.2126 * R + 0.7152 * G + 0.0722 * B`
 - **Chrominance (Cb, Cr):**  `Cb = (B - Y') / 1.8556`, `Cr = (R - Y') / 1.5748`
 The luma weights are weighted by perceived brightness. Green dominates because human vision is most sensitive to it. Cb(blue minus luma) and Cr(red minus luma) are scaled so they sit in roughly the same range as Y'.
  
@@ -279,14 +279,14 @@ if (AccumulationTextureA[uint2(x, y)] < 75 * SCALE)
  
 The reason: on a scene with a lot of midtones (which is most scenes) thousands of GPU threads end up trying to atomic-add to the same handful of scope cells near the center. That serialization completely tanks performance. The cap (`75 * SCALE`, equivalent to about 75 splats worth of accumulation) means that once a cell is clearly "very hot" the threads stop fighting over it, because past that point the trace is going to be at maximum visible intensity anyway.
  
-**Pass 3: `VSNormalizeCS`: turn counts into pixels.** This is where you discover that the obvious thing. Dividing the count by some max and calling it a day produces a horrible looking scope where the rare bright spots clip out and everything else is invisible. The fix is to compress accumulated alpha with a Reinhard-style curve, then alpha-blend the trace over the gamut disc:
+**Pass 3: `VSNormalizeCS`: turn counts into pixels.** Dividing the count by some max and calling it a day produces a horrible looking scope where the rare bright spots clip out and everything else is invisible. The fix is to compress accumulated alpha with a Reinhard-style curve, then alpha-blend the trace over the gamut disc:
  
 ```hlsl
 float4 accumulated = float4(r, g, b, a) / SCALE;
 accumulated.rgb = accumulated.rgb / accumulated.a;  // normalize color by weight
 // Reinhard compression: smooth roll-off into [0,1]
 accumulated.a = (accumulated.a * Opacity) / (1.0 + accumulated.a * Opacity);
-// gamma 2.2 — Slate re-applies sRGB on the way out
+// gamma 2.2, Slate re-applies sRGB on the way out
 accumulated.rgb = pow(saturate(accumulated.rgb), 2.2);
 float4 fin = lerp(color, float4(accumulated.rgb, 1), accumulated.a);
 ```
@@ -295,7 +295,7 @@ That last gamma line deserves a callout. The `RWTexture2D<float4>` I write into 
  
 ### Histogram
  
-The histogram is the simplest of the three because it has no 2D accumulation. It is a 1D array of bin counts. Instead of textures I use two `RWStructuredBuffer<uint>`s: a 1024-entry accumulation buffer (256 bins × 4 channels, laid out as `channel * 256 + bin`) and a 4-entry max buffer (one per channel).
+The histogram is the simplest of the three because it has no 2D accumulation. It is a 1D array of bin counts. Instead of textures I use two `RWStructuredBuffer<uint>`s: a 1024-entry accumulation buffer (256 bins x 4 channels, laid out as `channel * 256 + bin`) and a 4-entry max buffer (one per channel).
  
 **Pass 1: `HistogramScreenCS`:** every viewport pixel computes its bin and increments. There is no spatial output yet, just bin counts.
  
@@ -336,19 +336,19 @@ if (MaxR > 0 && HeightFromBottom <= (float(CountR) / MaxR))
     OutColor.r = 1.0;
 ```
  
-That `divide by max` is what makes both bright scenes and dark scenes legible — without it a sunny outdoor frame and a candlelit interior would produce histograms with completely different visual scales. The two-pass `accumulate → reduce-max → render` pattern is how every professional scope I have ever used works, and I had to reverse-engineer it from observing how DaVinci Resolve responds to inputs because no UE tutorial covers it.
+That `divide by max` is what makes both bright scenes and dark scenes legible. 
  
 ### Waveform
  
-The waveform reuses the accumulate-then-normalize machinery from the vectorscope — same `PF_R32_UINT` per-channel textures, same atomic-add with the saturation guard, same Reinhard alpha compression, same Slate gamma compensation. What changes is the mapping from source pixel to scope pixel, and the per-mode tinting.
+The waveform reuses a similar algorithm to the vectorscope. Same `PF_R32_UINT` per-channel textures, same atomic add with the saturation guard, same Reinhard alpha compression, same Slate gamma compensation. What changes is the mapping from source pixel to scope pixel, and the per-mode tinting.
  
-In Luma mode the source `(x, y)` collapses to scope `(x, 1 - lum)` — Y is thrown away, replaced by luminance:
+In Luma mode the source `(x, y)` collapses to scope `(x, 1 - lum)`. Y is thrown away, replaced by luminance:
  
 ```hlsl
 outPx[0] = uint2(uv.x * ScreenSizeOutputX, (1 - lum) * ScreenSizeOutputY);
 ```
  
-In RGB mode the same X gets reused for three writes stacked on top of each other, each at the per-channel value. In Parade mode the scope is split into thirds horizontally and each channel gets its own column-third:
+In RGB mode the same X gets reused for three writes stacked on top of each other, each at the per-channel value. In Parade mode the scope is split into thirds horizontally and each channel gets its own column third:
  
 ```hlsl
 outPx[0].x = (uv.x * 0.33333) * ScreenSizeOutputX;
@@ -366,9 +366,9 @@ outPx[1].y = (1 - ycbcr.g - 0.5) * ScreenSizeOutputY;   // Cb centered
 outPx[2].y = (1 - ycbcr.b - 0.5) * ScreenSizeOutputY;   // Cr centered
 ```
  
-That `-0.5` shift means zero chroma sits at the vertical middle of the parade strip, which is what a colorist expects.
+That `-0.5` shift means zero chroma sits at the vertical middle of the parade strip.
  
-The other waveform-specific bit is **per-channel tinting**. In RGB and Parade modes each write picks a color based on its channel — slightly desaturated red/green/blue. In YCbCr mode Y gets white, Cb gets light blue, Cr gets light red, matching broadcast convention. Without tinting, the three stacked or paraded channels are indistinguishable when they overlap.
+The other waveform specific bit is **per-channel tinting**. In RGB and Parade modes each write picks a color based on its channel, slightly desaturated red/green/blue. In YCbCr mode Y gets white, Cb gets light blue, Cr gets light red, matching broadcast convention. Without tinting, the three stacked or paraded channels are indistinguishable when they overlap.
  
 ```hlsl
 if (ViewType == 4 || ViewType == 1) {           // RGB or Parade
@@ -377,13 +377,13 @@ if (ViewType == 4 || ViewType == 1) {           // RGB or Parade
     else             { r = 0.2; g = 0.2; b = 1.0; }
 }
 else if (ViewType == 2) {                       // YCbCr parade
-    if      (i == 0) { r = g = b = 1.0; }       // Y → white
-    else if (i == 1) { r = 0.5; g = 0.5; b = 1.0; }  // Cb → light blue
-    else             { r = 1.0; g = 0.5; b = 0.5; }  // Cr → light red
+    if      (i == 0) { r = g = b = 1.0; }       // Y -> white
+    else if (i == 1) { r = 0.5; g = 0.5; b = 1.0; }  // Cb -> light blue
+    else             { r = 1.0; g = 0.5; b = 0.5; }  // Cr -> light red
 }
 ```
  
-The dispatch for the accumulate pass is sized to the **source viewport**, not the output texture, because we want one thread per source pixel. The output is 1080 × 720 but the render resolution can be anything. That decoupling is what the `ScreenSizeInput*` vs `ScreenSizeOutput*` parameters are for — input dimensions are used to compute the normalized UV that drives the X mapping, output dimensions are the splat target.
+The dispatch for the accumulate pass is sized to the **source viewport**, not the output texture, because we want one thread per source pixel. The output is 1080 * 720 but the render resolution can be anything. That decoupling is what the `ScreenSizeInput*` vs `ScreenSizeOutput*` parameters are for. Input dimensions are used to compute the normalized UV that drives the X mapping, output dimensions are the splat target.
  
 ---
  
@@ -392,11 +392,11 @@ The dispatch for the accumulate pass is sized to the **source viewport**, not th
 If I had to name the things I wish someone had told me at the start, they would be these.
  
 1. **Integer accumulation textures are the trick** for any heatmap-style visualization on the GPU. You cannot atomic-add on float, so you separate concerns: 32-bit unsigned integer atomic adds during accumulation, float normalization in a second pass.
-2. **Guard your atomics against hot-cell contention.** A cheap `if (Accumulation[cell] < cap)` check before every `InterlockedAdd` keeps thousands of threads from serializing on the few pixels that everything maps to. This single conditional roughly doubled my frame rate on busy viewports.
-3. **`SubscribeToPostProcessingPass` is where you tap in,** not the `Pre*Render*` hooks. Choose the pass based on what color space you want — FXAA gives you post-tonemap display-referred values, which is what scopes are supposed to measure.
-4. **Slate treats `UTextureRenderTarget2D` brushes as sRGB.** Apply `pow(rgb, 2.2)` in the final compute pass to compensate, or your reds become maroons and your colors look "off" in ways you can't put a finger on.
-5. **The engine source is the manual.** Half of the API I used (the `FViewInfo` cast, the typed UAV load flag, the version skew of the subscribe signature) is not in any official doc page. The fastest way to get unstuck was to grep the engine source for any sample that did something similar — and there is almost always one, hidden away inside `Source/Runtime/Renderer/`.
-The plugin is published free on Fab if anyone wants to poke at the binary, and the source is available on request. Hope this saves someone the months it took me to assemble it.
+2. **Guard your atomics against hot cell contention.** A cheap `if (Accumulation[cell] < cap)` check before every `InterlockedAdd` keeps thousands of threads from serializing on the few pixels that everything maps to. 
+3. **`SubscribeToPostProcessingPass` is where you tap in,** not the `PreRender` hooks. Choose the pass based on what color space you want. FXAA gives you post-tonemap display-referred values, which is what scopes are supposed to measure.
+4. **Slate treats `UTextureRenderTarget2D` brushes as sRGB.** Apply `pow(rgb, 2.2)` in the final compute pass to compensate, or your reds become maroons and your colors look off in ways you can't put a finger on.
+5. **The engine source is the manual.** Half of the API I used (the `FViewInfo` cast, the typed UAV load flag, the version skew of the subscribe signature) is not in any official doc page. The fastest way to get unstuck was to grep the engine source for any sample that did something similar and there is almost always one, hidden away inside `Source/Runtime/Renderer/`.
+The plugin is published free on Fab if anyone wants to poke at the binary, and the source is available there. Hope this saves someone the months it took me to assemble it.
 
 
 ## Some resources I found useful
