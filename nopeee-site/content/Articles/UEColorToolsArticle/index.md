@@ -12,8 +12,11 @@ draft: false
 # UE Color Tools Implementation
  
 This is a writeup of how I built **UEColorTools**, a real-time vectorscope, histogram, and waveform monitor that runs inside the Unreal Engine 5 editor. It uses compute shaders and the Render Dependency Graph (RDG) to sample the viewport every frame and draw broadcast style scopes into Slate widgets.
+
+
+![alltools](../uecolortoolsarticle/Thumbnail.png) 
  
-The reason I wanted to write this down is that maybe half of what I had to figure out is not really documented anywhere I could find. The UE source code is the documentation, and even that takes a lot of staring at to make sense of. So this article is mostly a record of the non-obvious things.
+The reason I wanted to write this down is that maybe half of what I had to figure out is not really documented anywhere I could find. The UE source code is a big part of the documentation I used, and even that takes a lot of staring at to make sense of. So this article is mostly a record of the non-obvious things I had to figure out.
  
 ---
  
@@ -132,7 +135,7 @@ Then the cast works:
 const FIntRect ViewportRect = static_cast<const FViewInfo&>(View).ViewRect;
 ```
  
-This is the only way I found to get the rendered region's pixel size on the render thread. The scene color texture is allocated at a power-of-two-aligned extent that is larger than the visible viewport, so without `ViewRect` you would dispatch threads over a region full of garbage outside the viewport.
+This is the only way I found to get the rendered region's pixel size on the render thread. The scene color texture is allocated at a power of two aligned extent that is larger than the visible viewport, so without `ViewRect` you would dispatch threads over a region full of garbage outside the viewport.
  
 ### Dispatching compute shaders
  
@@ -215,15 +218,23 @@ The math underneath all three scopes is Rec. 709 luminance and chrominance. From
 - **Chrominance (Cb, Cr):**  `Cb = (B - Y') / 1.8556`, `Cr = (R - Y') / 1.5748`
 The luma weights are weighted by perceived brightness. Green dominates because human vision is most sensitive to it. Cb(blue minus luma) and Cr(red minus luma) are scaled so they sit in roughly the same range as Y'.
  
-A **vectorscope** plots Cb on X and Cr on Y, ignoring luma. It tells you about hue (angle) and saturation (radius), nothing about brightness. A **histogram** counts how many pixels fall into each value bucket per channel, purely statistical, no spatial info. A **waveform** plots a single channel (or all three) as `column -> value` so each column of the screen becomes a vertical strip of dots in the scope, preserving horizontal position. Each one trades off different axes of information.
+A **vectorscope** plots Cb on X and Cr on Y, ignoring luma. It tells you about hue (angle) and saturation (radius), nothing about brightness.
+
+ A **histogram** counts how many pixels fall into each value bucket per channel, purely statistical, no spatial info.
+ 
+  A **waveform** plots a single channel (or all three) as `column -> value` so each column of the screen becomes a vertical strip of dots in the scope, preserving horizontal position. Each one trades off different axes of information.
  
 The reference targets on the vectorscope, the little boxes labeled R, G, B, C, M, Y, sit at 75 % saturation. That is the broadcast convention from SMPTE color bars, not 100 %, because 100 % primaries can clip and the 75 % target gives some headroom. There is also the "skin tone line" at about 123°, which is the locus of skin tones across most ethnicities. 
  
 ### Vectorscope
- 
+
+ ![alltools](../uecolortoolsarticle/VectorscopeBG.png) 
+
 The vectorscope is three compute passes, but the most interesting bit is what each one actually draws.
+
+
  
-**Pass 1:  `VectorscopeCS`: the gamut disc itself.** This was a moment of realization for me. The colored background of a vectorscope is *not* a sprite or a baked texture. It is the gamut, plotted live. For every output pixel I treat its position as a `(Cb, Cr)` coordinate, fix Y at 0.35 (a midtone), and run the inverse YCbCr -> RGB conversion. The result is the color that *would* land at that location. Pixels outside the unit circle get zeroed:
+**Pass 1:  `VectorscopeCS`: the gamut disc itself.** The colored background of a vectorscope is *not* a sprite or a baked texture. It is the gamut, plotted live. For every output pixel I treat its position as a `(Cb, Cr)` coordinate, fix Y at 0.35 (a midtone), and run the inverse YCbCr -> RGB conversion. The result is the color that *would* land at that location. Pixels outside the unit circle get zeroed:
  
 ```hlsl
 float2 uv = (DispatchThreadID.xy / 800.0f) * 2.0 - 1.0;
@@ -291,10 +302,12 @@ accumulated.rgb = pow(saturate(accumulated.rgb), 2.2);
 float4 fin = lerp(color, float4(accumulated.rgb, 1), accumulated.a);
 ```
  
-That last gamma line deserves a callout. The `RWTexture2D<float4>` I write into is treated as sRGB by Slate when it renders the brush. So anything I write at gamma 1.0 gets darkened on display. Applying `pow(rgb, 2.2)` here cancels the gamma Slate adds back. I found this empirically by wondering why my saturated reds looked like maroons in the panel. There is no documentation I could find that says "Slate treats RT brushes as sRGB"; I just kept changing things until the colors matched a reference image.
+That last gamma line deserves a callout. The `RWTexture2D<float4>` I write into is treated as sRGB by Slate when it renders the brush. So anything I write at gamma 1.0 gets darkened on display. Applying `pow(rgb, 2.2)` here cancels the gamma Slate adds back. I found this empirically by wondering why my saturated reds looked like maroons in the panel. 
  
 ### Histogram
  
+ ![alltools](../uecolortoolsarticle/HistogramBG.png) 
+
 The histogram is the simplest of the three because it has no 2D accumulation. It is a 1D array of bin counts. Instead of textures I use two `RWStructuredBuffer<uint>`s: a 1024-entry accumulation buffer (256 bins x 4 channels, laid out as `channel * 256 + bin`) and a 4-entry max buffer (one per channel).
  
 **Pass 1: `HistogramScreenCS`:** every viewport pixel computes its bin and increments. There is no spatial output yet, just bin counts.
@@ -307,7 +320,7 @@ uint CalculateBinIndex(float InValue, uint InChannelOffset)
 }
 ```
  
-The view-type system decides which channels to accumulate. In Luma mode all three RGB writes use the same luma value; in RGB mode each channel uses its own; in single-channel modes only one of the four writes fires.
+The view-type system decides which channels to accumulate. In Luma mode all three RGB writes use the same luma value. In RGB mode each channel uses its own. In single-channel modes only one of the four writes fires.
  
 **Pass 2: `HistogramMaxCS`:** dispatched as a *single* threadgroup with `numthreads(1, 1, 1)`. One thread walks all 256 bins per channel and writes the max into the second buffer. Doing this on the GPU rather than reading the bins back to the CPU keeps the data resident and avoids the read-back latency that would otherwise stall the frame:
  
@@ -328,7 +341,7 @@ void HistogramMaxCS(uint3 DispatchThreadID : SV_DispatchThreadID)
  
 A parallel reduction would be faster, but for 256 bins serial is fine and the code is one screen tall. Pick your battles.
  
-**Pass 3: `HistogramCS`:** the visualization. Dispatched over the output texture, one thread per output pixel. Each thread maps its X to a bin, reads the count for its channel(s), divides by the max for that channel, and decides whether its Y is below the resulting bar height. No atomics, just reads:
+**Pass 3: `HistogramCS`:**  Dispatched over the output texture, one thread per output pixel. Each thread maps its X to a bin, reads the count for its channel(s), divides by the max for that channel, and decides whether its Y is below the resulting bar height. No atomics, just reads:
  
 ```hlsl
 float HeightFromBottom = 1.0 - UV.y;
@@ -340,6 +353,8 @@ That `divide by max` is what makes both bright scenes and dark scenes legible.
  
 ### Waveform
  
+ ![alltools](../uecolortoolsarticle/WaveformBG.png) 
+
 The waveform reuses a similar algorithm to the vectorscope. Same `PF_R32_UINT` per-channel textures, same atomic add with the saturation guard, same Reinhard alpha compression, same Slate gamma compensation. What changes is the mapping from source pixel to scope pixel, and the per-mode tinting.
  
 In Luma mode the source `(x, y)` collapses to scope `(x, 1 - lum)`. Y is thrown away, replaced by luminance:
@@ -391,14 +406,27 @@ The dispatch for the accumulate pass is sized to the **source viewport**, not th
  
 If I had to name the things I wish someone had told me at the start, they would be these.
  
-1. **Integer accumulation textures are the trick** for any heatmap-style visualization on the GPU. You cannot atomic-add on float, so you separate concerns: 32-bit unsigned integer atomic adds during accumulation, float normalization in a second pass.
+1. **Integer accumulation textures are the trick** for any heatmap style visualization on the GPU. You cannot atomic add on float, so you separate concerns: 32-bit unsigned integer atomic adds during accumulation, float normalization in a second pass.
 2. **Guard your atomics against hot cell contention.** A cheap `if (Accumulation[cell] < cap)` check before every `InterlockedAdd` keeps thousands of threads from serializing on the few pixels that everything maps to. 
-3. **`SubscribeToPostProcessingPass` is where you tap in,** not the `PreRender` hooks. Choose the pass based on what color space you want. FXAA gives you post-tonemap display-referred values, which is what scopes are supposed to measure.
+3. **`SubscribeToPostProcessingPass` is where you tap in,** not the `PreRender` hooks. Choose the pass based on what color space you want. FXAA gives you post-tonemap display referred values, which is what scopes are supposed to measure.
 4. **Slate treats `UTextureRenderTarget2D` brushes as sRGB.** Apply `pow(rgb, 2.2)` in the final compute pass to compensate, or your reds become maroons and your colors look off in ways you can't put a finger on.
-5. **The engine source is the manual.** Half of the API I used (the `FViewInfo` cast, the typed UAV load flag, the version skew of the subscribe signature) is not in any official doc page. The fastest way to get unstuck was to grep the engine source for any sample that did something similar and there is almost always one, hidden away inside `Source/Runtime/Renderer/`.
+5. **The engine source is the manual.** Half of the API I used is not in any official doc page. The fastest way to get unstuck was to grep the engine source for any sample that did something similar and there is almost always one, hidden away inside `Source/Runtime/Renderer/`.
+
 The plugin is published free on Fab if anyone wants to poke at the binary, and the source is available there. Hope this saves someone the months it took me to assemble it.
 
 
 ## Some resources I found useful
 
 https://ciechanow.ski/color-spaces/
+
+https://webgpufundamentals.org/webgpu/lessons/webgpu-compute-shaders-histogram-part-2.html
+
+https://webgpufundamentals.org/webgpu/lessons/webgpu-compute-shaders-histogram.html
+
+https://dev.epicgames.com/community/learning/knowledge-base/0ql6/unreal-engine-using-sceneviewextension-to-extend-the-rendering-system
+
+https://youtu.be/Uml0BvjraSc?si=rsvG2gvw8eUcxVsO
+
+https://itscai.us/blog/post/ue-view-extensions/
+
+https://youtu.be/toYXfFrmXbk?si=YTtxRJrlhDIdsqcN

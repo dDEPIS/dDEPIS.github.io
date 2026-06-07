@@ -238,7 +238,7 @@ When tracing the reflection ray, the hit shader returns the color and distance t
         
 ```
 #### Light Contribution and Cook-Torrance BRDF
-For the contribution of the incoming light, I used a Cook-Torrance BRDF(Bidirectional Reflectance Distribution Function ). This involved the computation of the GGX normal distribution, geometry factor, and Fresnel effect – key components that influence how light interacts with surfaces. More on PBR [here](https://graphicscompendium.com/gamedev/15-pbr).
+For the contribution of the incoming light, I used a Cook-Torrance BRDF(Bidirectional Reflectance Distribution Function ). This involved the computation of the GGX normal distribution, geometry factor, and Fresnel effect, key components that influence how light interacts with surfaces. More on PBR [here](https://graphicscompendium.com/gamedev/15-pbr).
 ```cpp
 // calculating all the dot products required for this BRDF
         float NoV = clamp(dot(normal, normalize(-incidentRay)), 0.0, 1.0);
