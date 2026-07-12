@@ -1,6 +1,6 @@
 ---
 title: "UE Color Tools Plugin"
-summary: "Work in Progress... - UE5 plugin providing 3 color inspection tools (vectorscope, histogram, waveform)"
+summary: "UE5 plugin providing 3 color inspection tools: Vectorscope, Histogram, Waveform"
 categories: ["Project"]
 tags: ["project"]
 #externalUrl: ""

@@ -9,16 +9,16 @@
     <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
     <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
     <copyright>© 2026 DEPIS</copyright>
-    <lastBuildDate>Wed, 06 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 25 Feb 2026 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/index.xml" rel="self" type="application/rss+xml" />
     
     <item>
       <title>UE Color Tools </title>
       <link>http://localhost:1313/articles/uecolortoolsarticle/</link>
-      <pubDate>Wed, 06 Aug 2025 00:00:00 +0000</pubDate>
+      <pubDate>Wed, 25 Feb 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/articles/uecolortoolsarticle/</guid>
       <description></description>
-      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/uecolortoolsarticle/cover.png" />
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/uecolortoolsarticle/Thumbnail.png" />
     </item>
     
     <item>
@@ -27,7 +27,7 @@
       <pubDate>Wed, 06 Aug 2025 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/ue5colortools/</guid>
-      <description>Work in Progress&amp;hellip; - UE5 plugin providing 3 color inspection tools (vectorscope, histogram, waveform)</description>
+      <description>UE5 plugin providing 3 color inspection tools: Vectorscope, Histogram, Waveform</description>
       <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/ue5colortools/cover.png" />
     </item>
     

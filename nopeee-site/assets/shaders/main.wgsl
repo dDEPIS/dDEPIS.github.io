@@ -15,7 +15,7 @@ const MAT_GROUND = 0.0;
 const MAT_STEM = 1.0;
 const MAT_ROSE = 2.0;
 const MAT_DIRT = 3.0;
-
+const MAT_DISSOLVE = 4.0;
 
 
 @vertex
@@ -300,6 +300,93 @@ let pointiness = 1+ max(pos.y - 0.6, 0.0) * 2;
 }
 
 
+
+
+fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
+    let spacing = 1.8; 
+    let cell = floor(p.xz / spacing);
+    let local_p = fract(p.xz / spacing) - 0.5;
+    let sign_p = sign(local_p);
+    
+    var d_min: f32 = 100.0;
+    var final_mat: f32 = MAT_ROSE; 
+    
+    for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
+        for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
+            let neighbor_offset = vec2f(i, j) * sign_p;
+            let current_cell = cell + neighbor_offset;
+            
+            let seed = hash12(current_cell);
+            let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
+            
+            let speed = 0.25 + seed * 0.25; 
+            let start_h = 4.0 + seed2 * 4.0;
+            let cycle_duration = 12.0;// + seed * 3.0; 
+            
+            let local_time = (time + seed * 100.0) % cycle_duration;
+            
+            // "Virtual" drop Y is where it WOULD be if it never slowed down
+            let virtual_drop_y = start_h - (local_time * speed);
+            let ground_y = -0.48;// + seed * 0.06;
+            let ground_dist = virtual_drop_y - ground_y;
+            
+            // --- 1. DISSOLVE EARLIER ---
+            // Shifted the bounds: Starts dissolving 0.3 units ABOVE ground, 
+            // finishes fully dissolving at 0.3 units BELOW virtual ground.
+            let dissolve_progress = smoothstep(0.6, -0.2, ground_dist);
+            
+            if (dissolve_progress > 0.99) { continue; }
+            
+            let size = 0.13 + seed * 0.04;
+            
+            // --- 2. THE SOFT LANDING ---
+            var actual_y: f32 = virtual_drop_y;
+            let landing_zone = 0.5; // Starts slowing down 0.5 units above ground
+            
+            if (ground_dist < landing_zone && ground_dist > 0.0) {
+                // Map the distance to a 0.0 - 1.0 range, then apply a quadratic curve (t * t)
+                // This naturally decelerates the fall and easing it perfectly into ground_y
+                let t = ground_dist / landing_zone; 
+                actual_y = ground_y + landing_zone * (t * t);
+            } else if (ground_dist <= 0.0) {
+                actual_y = ground_y;
+            }
+            
+            let cell_center_xz = (current_cell + 0.5) * spacing;
+            var q = vec3f(p.x - cell_center_xz.x, p.y - actual_y, p.z - cell_center_xz.y);
+            
+            let wind_damp = smoothstep(-0.1, 0.5, ground_dist);
+            q.x += sin(time * 1.5 + seed * 10.0) * 0.25 * wind_damp;
+            q.z += cos(time * 1.2 + seed2 * 10.0) * 0.25 * wind_damp;
+            
+            // Because 'actual_y' curves smoothly, the rotation naturally decelerates with it!
+            let fall_progress = start_h - actual_y;
+            q = opRotateX(q, fall_progress * (2.5 + seed) + seed * 10.0);
+            q = opRotateY(q, fall_progress * 1.5 + seed * 20.0);
+            q = opRotateZ(q, fall_progress * 1.0 + seed * 5.0);
+            
+            let d_base = sdPetal(q / size, 0.32) * size;
+            
+            let noise = (sin(q.x * 80.0) * sin(q.y * 50.0) * sin(q.z * 70.0)) * 0.5 + 0.5;
+            let carve_amount =  (noise * dissolve_progress * 0.02);//(dissolve_progress * 0.05) +
+            let d = d_base + carve_amount;
+            
+            if (d < d_min) {
+                d_min = d;
+                
+                // 3. TRIGGER MATERIAL EARLIER
+                // Switch to the glowing dissolve material as soon as the progress > 0
+                if (dissolve_progress > 0.0) {
+                    let glow_intensity = smoothstep(0.0, 1.0, noise) * sin(dissolve_progress * 3.1415);
+                    final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
+                } else {
+                    final_mat = MAT_ROSE;
+                }
+            }
+        }
+    }
+    return vec2f(d_min, final_mat);
+}
 
 fn sdRose(p: vec3f) -> f32 {
 
@@ -633,7 +720,12 @@ fn map(p_in: vec3f) -> vec2f {
     }
 
  
-   
+
+    // New Petal Integration
+    let res_petals = sdFallingPetals(p, time);
+    if (res_petals.x < res.x) {
+        res = res_petals; 
+    }
 
     return res; 
 }
@@ -746,11 +838,13 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let p = ro + rd * t;       
         let normal = calc_normal(p); 
         
-        let light_pos = vec3f(4.0, 5.0, 0.0);
+       // let light_pos = vec3f(4.0, 5.0, 0.0);
+        let light_pos = vec3f(0.0, 15.0, 0.0);
+
         let light_dir = normalize(light_pos - p);
         
         let diff = clamp(dot(normal, light_dir), 0.1, 1.0);
-       let shadow = softshadow(p + normal * 0.01, light_dir, 0.02, length(light_pos - p), 16.0);
+        let shadow = softshadow(p + normal * 0.01, light_dir, 0.02, length(light_pos - p), 16.0);
 
         var albedo = vec3f(0.0);
         
@@ -767,9 +861,27 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
            albedo = vec3f(0.1, 0.07, 0.0)*0.8;   
         }
 
+         else if (mat_id >= MAT_DISSOLVE && mat_id < MAT_DISSOLVE + 1.0) 
+         {
+            
+            // Unpack the 0.0 - 0.99 glow intensity
+            let glow_intensity = fract(mat_id);
+            
+            let base_color = vec3f(0.15, 0.02, 0.05) * 0.8; 
+            let glow_color = vec3f(0.15, 0.02, 0.05)*3; // Bright fiery orange
+            
+            // Apply the base texture mix
+            albedo = mix(base_color, glow_color, glow_intensity);
+            
+            // Emissive Boost: 
+            // Because ambient and diffuse multiply the albedo later, we push 
+            // the albedo heavily over 1.0 so the final source color naturally acts emissive.
+            albedo += glow_color * glow_intensity * 5.0; 
+        }
+
         
         let ambient = vec3f(0.6) * albedo;
-        let diffuse = albedo * diff * vec3f(1.0, 0.95, 0.8)* shadow;// ; 
+        let diffuse = albedo * diff * vec3f(1.0, 0.95, 0.8);// * shadow; 
         
         final_color = ambient + diffuse;
         final_color = mix(final_color, vec3f(0.0, 0.0, 0.0), 1.0 - exp(-0.01 * t * t));
