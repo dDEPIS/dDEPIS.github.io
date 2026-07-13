@@ -77,51 +77,59 @@
   });
 
   // --- MOUSE CONTROL VARIABLES ---
+  let targetColorT = 0.0; // 0 = Red, 1 = White
+  let currentColorT = 0.0;
+
+  // --- KEYBOARD LISTENER ---
+  window.addEventListener("keydown", (e) => {
+      // Using e.key is safer across different keyboard layouts
+      if (e.key.toLowerCase() === "c") { 
+          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
+      }
+  });
+
+  // --- MOUSE CONTROL VARIABLES ---
   let isDragging = false;
   let lastMouseX = 0;
   let lastMouseY = 0;
   
-  // Camera Angles (Default view)
-  // Yaw: Rotation around Y axis
-  // Pitch: Up/Down look
+  // Track where the mouse started so we can distinguish a click from a drag
+  let startMouseX = 0;
+  let startMouseY = 0;
+  
   let Multiplier = 0.5; 
   let cameraPitch = 0.5; 
-
-  let cameraYaw = 0; // The accumulated angle
+  let cameraYaw = 0; 
 
   // --- MOUSE EVENT LISTENERS ---
   window.addEventListener("mousedown", (e) => {
       isDragging = true;
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
+      
+      // Record the exact starting pixel
+      startMouseX = e.clientX;
+      startMouseY = e.clientY;
   });
 
-  window.addEventListener("mouseup", () => {
+  window.addEventListener("mouseup", (e) => {
       isDragging = false;
+      
+      // Calculate how far the mouse traveled while the button was held down
+      let travelDistance = Math.abs(e.clientX - startMouseX) + Math.abs(e.clientY - startMouseY);
+      
+      // If it moved less than 5 pixels, it was a Click, not a Drag! Toggle the color.
+      if (travelDistance < 5) {
+          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
+      }
   });
 
   window.addEventListener("mousemove", (e) => {
-
-   let rawMultiplier = (e.clientX / window.innerWidth) * 2.0 - 1.0;
-
-    // 2. Clamp it strictly between -1.0 and 1.0
-    // Math.max(-1, ...) prevents it from going lower than -1
-    // Math.min(1, ...) prevents it from going higher than 1
-    Multiplier = Math.max(-1.0, Math.min(1.0, rawMultiplier));
-         cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+      let rawMultiplier = (e.clientX / window.innerWidth) * 2.0 - 1.0;
+      Multiplier = Math.max(-1.0, Math.min(1.0, rawMultiplier));
+      cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+      
       if (!isDragging) return;
-
-      const sensitivity = 0.005;
-      const deltaX = e.clientX - lastMouseX;
-      const deltaY = e.clientY - lastMouseY;
-
-      // Update angles
-    // cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
-    //  cameraPitch += deltaY * sensitivity;
-
-      // Clamp Pitch so you don't flip upside down
-      // Limit between -89 degrees and +89 degrees (in radians)
-    //  cameraPitch = Math.max(-1.5, Math.min(1.5, cameraPitch));
 
       lastMouseX = e.clientX;
       lastMouseY = e.clientY;
@@ -150,16 +158,10 @@
 
   function frame() {
     const time = performance.now() / 1000;
-    
-
-
     const dt = time - lastTime;
     lastTime = time;
 
-  
     let speed = Multiplier * 0.7;
-
-
     const minSpeed = 0.2; 
 
     if (speed >= 0 && speed < minSpeed) {
@@ -170,10 +172,15 @@
     
     cameraYaw += speed * dt;
 
+    // Smoothly transition the color value
+    // Multiplying by 3.0 controls the speed of the fade
+    currentColorT+= (targetColorT - currentColorT) * 3.0 * dt;
+
     // Update Uniform Array
-    uniformValues[2] = time;       // Time
-    uniformValues[4] = cameraYaw;  // Camera Yaw
-    uniformValues[5] = cameraPitch;// Camera Pitch
+    uniformValues[2] = time;           // Time
+    uniformValues[3] = currentColorT;  // The new Color Transition value
+    uniformValues[4] = cameraYaw;      // Camera Yaw
+    uniformValues[5] = cameraPitch;    // Camera Pitch
 
     // Write to GPU
     device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
