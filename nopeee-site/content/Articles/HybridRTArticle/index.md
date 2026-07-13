@@ -1,6 +1,6 @@
 ---
 title: "Implementing a Hybrid Ray Tracer with DXR"
-summary: "A cool project I made "
+summary: "My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12."
 categories: ["Project"]
 tags: ["project"]
 #externalUrl: ""

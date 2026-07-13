@@ -16,7 +16,9 @@ const MAT_STEM = 1.0;
 const MAT_ROSE = 2.0;
 const MAT_DIRT = 3.0;
 const MAT_DISSOLVE = 4.0;
+const MAT_THORNS = 5.0;
 
+const RoseColor = vec3f(0.15, 0.02, 0.05);
 
 @vertex
 fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) vec4f {
@@ -302,8 +304,9 @@ let pointiness = 1+ max(pos.y - 0.6, 0.0) * 2;
 
 
 
+
 fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
-    let spacing = 1.8; 
+    let spacing = 2.0; 
     let cell = floor(p.xz / spacing);
     let local_p = fract(p.xz / spacing) - 0.5;
     let sign_p = sign(local_p);
@@ -319,11 +322,11 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let seed = hash12(current_cell);
             let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
             
-            let speed = 0.25 + seed * 0.25; 
-            let start_h = 4.0 + seed2 * 4.0;
-            let cycle_duration = 12.0;// + seed * 3.0; 
+            let speed = 0.45 + seed * 0.25; 
+            let start_h = 5.0 + seed2 * 1.0;
+            let cycle_duration = 16.0;// + seed * 3.0; 
             
-            let local_time = (time + seed * 100.0) % cycle_duration;
+            let local_time = (time + seed * 70.0) % cycle_duration;
             
             // "Virtual" drop Y is where it WOULD be if it never slowed down
             let virtual_drop_y = start_h - (local_time * speed);
@@ -337,7 +340,7 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             
             if (dissolve_progress > 0.99) { continue; }
             
-            let size = 0.13 + seed * 0.04;
+            let size = 0.09 + seed * 0.06;
             
             // --- 2. THE SOFT LANDING ---
             var actual_y: f32 = virtual_drop_y;
@@ -374,13 +377,14 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             if (d < d_min) {
                 d_min = d;
                 
-                // 3. TRIGGER MATERIAL EARLIER
-                // Switch to the glowing dissolve material as soon as the progress > 0
                 if (dissolve_progress > 0.0) {
-                    let glow_intensity = smoothstep(0.0, 1.0, noise) * sin(dissolve_progress * 3.1415);
+                    let glow_intensity = smoothstep(0.4, 1.0, noise) * sin(dissolve_progress * 3.1415);
                     final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
                 } else {
-                    final_mat = MAT_ROSE;
+                    // Calculate gradient for falling petal based on its local coordinate 'q'
+                    let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
+                    let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
+                    final_mat = MAT_ROSE + gradient;
                 }
             }
         }
@@ -388,56 +392,49 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
     return vec2f(d_min, final_mat);
 }
 
-fn sdRose(p: vec3f) -> f32 {
-
-
+fn sdRose(p: vec3f) -> vec2f {
     let d_sphere = length(p - vec3f(0.0, 0.1, 0.0)) - 0.4;
 
     if (d_sphere > 0.05) {
-        return d_sphere;
+        // Safe early exit, returning a dummy material
+        return vec2f(d_sphere, -1.0);
     }
 
     var d_min = 100.0;
-   // var d_min_2d = distancePriority(100.0,0.0);
-
-    let petal_count =15.0; 
+    let petal_count = 15.0; 
     let golden_angle = 2.39996; 
-      let time = uniforms.time * 2.0 ;
-    for (var i = 1.0; i < petal_count; i += 1.0) {
-        
+    let time = uniforms.time * 2.0;
+    
+    // Explicit f32 for the loop to prevent WGSL type errors
+    for (var i: f32 = 1.0; i < 15.0; i += 1.0) { 
         let r = (0.01) * sqrt(i); 
         let theta = i * golden_angle;
          
-        // Lower outer petals
         let petal_center = vec3f(r * cos(theta), -r * 0.2, r * sin(theta));
-
-        
         let scale = 0.1 + (i / petal_count) * 0.25;
 
         var q = p - petal_center;
-        
         q = opRotateY(q, -theta + 1.57);
       
-        let tilt = -0.3 + (i / petal_count)* (1.0+sin(time)*0.2); // 
+        let tilt = -0.3 + (i / petal_count)* (0.9 + sin(time) * 0.15); 
         q = opRotateX(q, -tilt);
-        
-        // Scale the coordinate space
         q = q / 0.2;
 
-        // Calculate distance and multiply back
-
-    let pivot_offset = vec3f(0.0, 0.7, 0.0);
-        
-      
+        let pivot_offset = vec3f(0.0, 0.7, 0.0);
         let d = sdPetal(q - pivot_offset, scale) * scale;
         
-   
-         d_min = min(d_min, d);
-  
+        d_min = min(d_min, d);
     }
     
-    return d_min;
+    // The closer the local point 'p' is to 0,0,0, the closer it is to the root.
+    // Map this distance to a 0.0 - 0.99 gradient.
+    let dist_from_center = max(length(p + vec3f(0.0, 0.1, 0.0)) - 0.05, 0.0);
+    let gradient = clamp(dist_from_center * 3.5, 0.0, 0.99);
+    
+    return vec2f(d_min, MAT_ROSE + gradient);
 }
+
+
 fn sdLeaf(p: vec3f) -> f32 {
     
     // 1. THE PETIOLE (Leaf Stem) ---
@@ -596,7 +593,7 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     var material = MAT_STEM;
     if(d_spine< d_stem_d_leaf)
     {
-        material = MAT_DIRT; 
+        material = MAT_THORNS; 
     }
     
 
@@ -650,7 +647,7 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
 
     let curve = q.x * q.x*8 ; 
     
-    let wave = sin(q.x * 50.0) * 0.005 + sin(q.z * 50.0) * 0.005 +sin(q.x * 80.0) * 0.003 + sin(q.z * 80.0) * 0.003 ;
+    let wave = sin(time + q.x * 50.0) * 0.005 + sin(time + q.z * 50.0) * 0.005 +sin(time + q.x * 80.0) * 0.003 + sin(time +     q.z * 80.0) * 0.003 ;
     
     q.y += curve + wave; 
 
@@ -665,32 +662,25 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
 
    
 
+    // ... inside flower(p, location) ...
     var d_bud = sdVerticalVesicaSegment( pos - vec3f(0.0, -0.13, 0.0), 0.4, 0.20);
-
     let cutoff_height = 0.1; 
-    d_bud =  max(d_bud, pos.y - cutoff_height);
+    d_bud = max(d_bud, pos.y - cutoff_height);
 
-  //  let d = sdPetal(pos ,1);
-
- 
-   var rose = sdRose(pos+ vec3f(0.0, -0.03, 0.0)); //sdRose(pos);
-   var bud = min(d_sepals, d_bud);
-
+    // Grab both distance (.x) and material (.y)
+    let rose_data = sdRose(pos + vec3f(0.0, -0.03, 0.0)); 
+    let rose_dist = rose_data.x;
+    
     var d_greenery = smin(d_stem.x, d_sepals, 0.02);
     d_greenery = smin(d_greenery, d_bud, 0.02);
 
-
-    
-   let flower =min(rose,d_greenery);  //sdRose(pos);//  min(sdRose(pos),min(d, min(d_sepals, d_bud))) ; //min(d, min(d_sepals, d_bud)); 
-
+    let flower_final = min(rose_dist, d_greenery); 
     var material = d_stem.y;
 
-
-    if( rose < d_greenery)
-    {
-        material = MAT_ROSE;
+    if(rose_dist < d_greenery) {
+        material = rose_data.y; // This passes the MAT_ROSE + gradient forward!
     } 
-   return vec2f(flower, material);
+    return vec2f(flower_final, material);
 }
 
 // --- The Main Scene Description ---
@@ -706,8 +696,8 @@ fn map(p_in: vec3f) -> vec2f {
     if(length( vec2f(p.x, p.z)) < 0.7)
     {
        
-        res = vec2f(p.y + 0.5 +sin(p.x*10)*0.02 +sin(3+p.z*13)*0.03+ sin(p.x*15)*0.01 +sin(p.z*18)*0.01+ sin(30+ p.x*110)*0.002 +sin(35+p.z*115)*0.002
-        + sin(10+ p.x*127)*0.001 +sin(5+p.z*123)*0.001, MAT_DIRT);
+        res = vec2f(p.y + 0.5 +sin( time+ p.x*10)*0.03 +sin(time*3+p.z*13)*0.03+ sin( 2.5*time+ p.x*15)*0.05 +sin(2*time+ p.z*18)*0.01+ sin(8*time+30+ p.x*110)*0.002 +sin(time+ 35+p.z*115)*0.002
+        + sin(6*time+ 10+ p.x*127)*0.001 +sin(4*time+ 5+p.z*143)*0.001, MAT_DIRT);
     }
 
     let flower_pos = vec3f(0.0, 2.0, 0.0);
@@ -812,15 +802,33 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let up = cross(fwd, right);
     let rd = normalize(fwd + right * uv_flipped.x + up * uv_flipped.y);
     
-    var t = 0.0;        
+   var t = 0.0;        
     var hit = false;    
     var mat_id = -1.0;
+    
+    // Create an accumulator for our volumetric bloom
+    var accumulated_glow = vec3f(0.0, 0.0, 0.0);
 
-    for(var i = 0; i < 150; i++) { 
+    for(var i = 0; i < 250; i++) { 
         let p = ro + rd * t;
         let res = map(p); 
         let d = res.x;
         mat_id = res.y;
+
+        // --- FAKE BLOOM ACCUMULATION ---
+        // If the ray gets close to an emissive surface, gather some light.
+        // We use inverse-square falloff (1.0 / d^2) so the glow is intensely bright 
+        // near the surface and smoothly dissipates outward.
+        let mat_base = floor(mat_id);
+        if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
+            // A soft, dark red glow for the main petals
+            accumulated_glow += RoseColor * (0.0008 / (0.01 + d * d * 10));
+        }
+         else if (mat_base == MAT_DISSOLVE) { 
+            // A bright, fiery orange glow for the dissolving particles
+            accumulated_glow += vec3f(1.0, 1.0, 1.0) * (0.0008 / (0.01 + d * d * 3150.0)); 
+        }
+      
 
         if (d < 0.001) {    
             hit = true;
@@ -829,74 +837,127 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         if (t > 20.0) {    
             break;
         }
+        // Multiply by 0.3 ensures high detail but means more steps. 
+        // The glow accumulation naturally benefits from these dense, small steps!
         t = t + d * 0.3; 
     }
 
     var final_color =vec3f(0.0, 0.0, 0.0);     
 
-    if (hit) {
+   if (hit) {
         let p = ro + rd * t;       
         let normal = calc_normal(p); 
+        let view_dir = normalize(ro - p); // Needed for specular shine
         
-       // let light_pos = vec3f(4.0, 5.0, 0.0);
-        let light_pos = vec3f(0.0, 15.0, 0.0);
-
-        let light_dir = normalize(light_pos - p);
+        let light_pos = vec3f(1.0,6.0, 0.0);
+        
+        // 1. Calculate Distance for Falloff
+        let light_vec = light_pos - p;
+        let light_dist = length(light_vec);
+        let light_dir = light_vec / light_dist; // Normalized direction
+        
+        let half_dir = normalize(light_dir + view_dir); 
+        
+        // 2. The Attenuation Math (Inverse Square Law with a softening factor)
+        let light_intensity = 12.0; // Boost the bulb power to compensate for falloff
+        let attenuation = light_intensity / (1.0 + 0.1 * light_dist + 0.15 * (light_dist * light_dist));
         
         let diff = clamp(dot(normal, light_dir), 0.1, 1.0);
-        let shadow = softshadow(p + normal * 0.01, light_dir, 0.02, length(light_pos - p), 16.0);
+        let shadow = softshadow(p + normal * 0.01, light_dir, 0.02, light_dist, 16.0);
 
-        var albedo = vec3f(0.0);
+       var albedo = vec3f(0.0);
+        var roughness = 1.0;
+        var spec_power = 0.0;
+        var rim_light = 0.0;
+        var emission = vec3f(0.0); // 1. Add this new emission variable
         
-        if (abs(mat_id - MAT_GROUND) < 0.1) {
+        let mat_base = floor(mat_id);
+        let mat_frac = fract(mat_id);
+        
+        if (abs(mat_base - MAT_GROUND) < 0.1) {
             albedo = vec3f(0.2, 0.2, 0.2);  
-           
-        } else if (abs(mat_id - MAT_STEM) < 0.1) {
-            albedo = vec3f(0.05, 0.1, 0.02)*0.8;
-        } else if (abs(mat_id - MAT_ROSE) < 0.1) {
-          //  let height_factor = smoothstep(2.0, 2.4, p.y);
-            albedo =vec3f(0.15, 0.02, 0.05)*0.8;  //mix(vec3f(0.6, 0.0, 0.05), vec3f(0.9, 0.05, 0.1), height_factor);
+              roughness = 10;   // Sharp, wet shine for the stem and leaves
+            spec_power =0.3;
+            
+        } else if (abs(mat_base - MAT_STEM) < 0.1) {
+            albedo = vec3f(0.05, 0.1, 0.02) * 0.8;
+            roughness = 180.0;   // Sharp, wet shine for the stem and leaves
+            spec_power =1.2;
+             
+        } else if (abs(mat_base - MAT_ROSE) < 0.1) {
+           let base_color = vec3f(0.85, 0.9, 0.75)* 0.3; 
+            let tip_color = RoseColor * 0.8; 
+            
+            albedo = mix(base_color, tip_color, smoothstep(0.0, 0.55, mat_frac));
+            
+            roughness = 180.0;    
+            spec_power = 1.2;
+            rim_light = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.95;
+            
+            // 2. Add a soft baseline emission to all rose petals
+            // This ensures they glow in the dark even when the light falls off
+            emission = albedo * 0.2;
+            
         }
-        else if (abs(mat_id - MAT_DIRT) < 0.1) {
-           albedo = vec3f(0.1, 0.07, 0.0)*0.8;   
+         else if (abs(mat_base - MAT_DIRT) < 0.1) 
+        { 
+           albedo = vec3f(0.0, 0.0, 0.0);  
+            roughness =35;  
+            spec_power =1.0;
+        } 
+        else if (abs(mat_base - MAT_DISSOLVE) < 0.1) 
+        {
+           let glow_intensity = mat_frac;
+            let tip_color = RoseColor * 0.8; 
+            let glow_color = RoseColor * 1.5; 
+            
+            albedo = mix(tip_color, glow_color, glow_intensity);
+            
+            roughness = 6.0;
+            spec_power = 0.1;
+            
+            // 3. Make the dissolving edges highly emissive
+            // We use the source glow_color directly so the emission is pure and unshaded
+            emission = glow_color * glow_intensity * 2.5;
+        }
+        else if (abs(mat_base - MAT_THORNS) < 0.1) 
+        {
+         albedo = RoseColor ;   
+         roughness = 60.0;    
+         spec_power = 0.5;
         }
 
-         else if (mat_id >= MAT_DISSOLVE && mat_id < MAT_DISSOLVE + 1.0) 
-         {
-            
-            // Unpack the 0.0 - 0.99 glow intensity
-            let glow_intensity = fract(mat_id);
-            
-            let base_color = vec3f(0.15, 0.02, 0.05) * 0.8; 
-            let glow_color = vec3f(0.15, 0.02, 0.05)*3; // Bright fiery orange
-            
-            // Apply the base texture mix
-            albedo = mix(base_color, glow_color, glow_intensity);
-            
-            // Emissive Boost: 
-            // Because ambient and diffuse multiply the albedo later, we push 
-            // the albedo heavily over 1.0 so the final source color naturally acts emissive.
-            albedo += glow_color * glow_intensity * 5.0; 
-        }
 
+        let ambient = vec3f(0.25) * albedo; 
+        let diffuse_color = albedo * diff * vec3f(1.0, 0.95, 0.8);
+        let diffuse = diffuse_color * attenuation; 
+        let spec_angle = max(dot(normal, half_dir), 0.0);
+        let specular = pow(spec_angle, roughness) * spec_power * attenuation; 
         
-        let ambient = vec3f(0.6) * albedo;
-        let diffuse = albedo * diff * vec3f(1.0, 0.95, 0.8);// * shadow; 
-        
-        final_color = ambient + diffuse;
-        final_color = mix(final_color, vec3f(0.0, 0.0, 0.0), 1.0 - exp(-0.01 * t * t));
+        // Add emission directly to the end. It ignores shadows and attenuation!
+        final_color = ambient + diffuse + (vec3f(1.0, 0.9, 0.8) * specular) + (albedo * rim_light * attenuation) + emission;
     }
 
+   if (hit) {
+        let hit_mat = floor(mat_id);
+        if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE) {
+            accumulated_glow *= 0.1; 
+        }
+    }
 
-   let noise = hash12(pos.xy + uniforms.time);
-    
- 
+    // 2. Exponential Distance Fog (Applied FIRST)
+    // The geometry fades into the black void
+    let fog_density = 0.012; 
+    let fog_factor = 1.0 - exp(-fog_density * t * t);
+    final_color = mix(final_color, vec3f(0.0, 0.0, 0.0), clamp(fog_factor, 0.0, 1.0));
+
+    // 3. Additive Volumetric Bloom (Applied SECOND)
+    // The gathered light dust is added on top, piercing the darkness
+    final_color += accumulated_glow;
+
+    // 4. Film Grain Noise
+    let noise = hash12(pos.xy + uniforms.time);
     final_color += (noise - 0.5) * (25.0 / 255.0);
 
-
     return vec4f(final_color, 1.0);
-
-
-    return vec4f(final_color, 1.0);
- 
 }

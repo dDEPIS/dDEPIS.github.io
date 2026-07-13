@@ -1,6 +1,6 @@
 ---
 title: "UE Color Tools "
-summary: ""
+summary: "A summary of how I implemented the UE Color Tools plugin using the Scene View Extension. "
 categories: ["Project"]
 tags: ["project"]
 #externalUrl: ""
