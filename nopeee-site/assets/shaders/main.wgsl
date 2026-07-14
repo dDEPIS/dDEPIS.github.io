@@ -16,6 +16,8 @@ const MAT_ROSE = 2.0;
 const MAT_DIRT = 3.0;
 const MAT_DISSOLVE = 4.0;
 const MAT_THORNS = 5.0;
+const MAT_LEAVES = 6.0;
+const MAT_TENTACLE = 7.0;
 
 // Define our two extreme colors
 const COLOR_RED = vec3f(0.15, 0.02, 0.05);
@@ -218,46 +220,80 @@ fn smax(a: f32, b: f32, k: f32) -> f32 {
 }
 
 fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
-    let repetitions = 7.0; // 7 creates an asymmetrical, organic look
+    let repetitions = 11.0; 
     let angle_step = 6.28318 / repetitions;
     
-    // 1. Fold space in a circle around the Y axis
     let a = atan2(p.z, p.x);
     let sector = round(a / angle_step);
     let new_angle = a - sector * angle_step;
     
     let dist = length(p.xz);
+    let root_y = -0.75; 
     
-    // 2. Move the local coordinate out to the edge of the breathing hole
-    // We subtract 0.1 so the roots stay buried slightly inside the dirt edge
-    var q = vec3f( cos(new_angle) * dist - (hole_radius - 0.1), p.y, sin(new_angle) * dist );
+    var q = vec3f(
+        cos(new_angle) * dist, 
+        p.y - root_y,          
+        sin(new_angle) * dist  
+    );
     
-    // 3. Define the length of the tentacle stretching outward along the X axis
-    let max_length = 1.3;
+    // --- THE 0.5s ADVANCED COLOR MATH ---
+    let cycle_angle = time * 0.4 + sector * 3.7;
+    
+    // Lowered from 0.2 down to 0.05. It now looks only a fraction of a second into the future!
+    let advanced_angle = cycle_angle + 0.007; 
+    
+    // Tightened the smoothstep from (0.1, -0.1) to (0.05, -0.05).
+    // This makes the fade from Red to White happen much faster instead of a long, slow bleed.
+    let retract_blend = smoothstep(0.05, -0.05, cos(advanced_angle));
+    
+    let spawn_phase = sin(cycle_angle);
+    let growth_factor = smoothstep(-0.2, 0.6, spawn_phase);
+    
+    if (growth_factor < 0.01) {
+        return vec2f(100.0, MAT_DIRT);
+    }
+    
+    let max_length = 2.2 * growth_factor;
     let h = clamp(q.x, 0.0, max_length); 
     
-    // 4. The "Wild Aggressive" Animation
-    // We add the 'sector' ID to the time phase so they don't all writhe in unison
+    let arch_y = h * 1.0 - (h * h * 0.4);
     let phase = sector * 13.5;
     
-    // Multiplying by 'h' forces the root to stay completely still, 
-    // while the tip swings wildly up/down and side-to-side.
-    let writhe_y = sin(time * 4.0 + h * 6.0 + phase) * 0.15 * h;
-    let writhe_z = cos(time * 3.1 + h * 5.0 + phase) * 0.15 * h;
+    let move_mask = smoothstep(0.2, max_length, h);
+    let writhe_y = sin(time * 4.0 + h * 6.0 + phase) * 0.15 * move_mask;
+    let writhe_z = cos(time * 3.1 + h * 5.0 + phase) * 0.15 * move_mask;
     
-    // Add a heavy gravity droop so they spill out over the concrete
-    let droop = h * h * 0.4;
+    let core_line = vec3f(h, arch_y + writhe_y, writhe_z);
     
-    // 5. The Shape (A bending line segment)
-    let core_line = vec3f(h, writhe_y - droop, writhe_z);
+    let cross_section = vec2f(q.y - core_line.y, q.z - core_line.z);
+    let angle_around = atan2(cross_section.y, cross_section.x);
+    let twist = h * 12.0 - time * 3.0; 
     
-    // Taper the thickness from 0.04 at the root to an infinitely sharp 0.0 point
-    let thickness = 0.04 * (1.0 - (h / max_length));
+    // THE 3-STRIPE & TEXTURE MATH
+    let total_angle = (angle_around * 3.0) + twist;
+    let muscle_lobes = cos(total_angle);
+    let bumps = sin(h * 30.0 - time * 5.0) * cos(angle_around * 5.0);
     
-    let d = length(q - core_line) - thickness;
+    let taper = 1.0 - (h / max_length); 
+    let base_thickness = 0.06 * growth_factor * taper;
+    let gooey_thickness = base_thickness + (muscle_lobes * 0.02 * taper) + (bumps * 0.005 * taper);
     
-    // Safety multiplier of 0.6 because of the heavy domain warping (the writhing)
-    return vec2f(d * 0.6, MAT_STEM);
+    let d = length(q - core_line) - gooey_thickness;
+    
+   // --- MATERIAL CHOPPER ---
+    let single_wrap = (angle_around + (twist / 3.0)) / 6.2831853;
+    let lobe_id = floor(fract(single_wrap + 100.1666) * 3.0);
+    
+    var lobe_mat = MAT_DIRT; 
+    
+    if (lobe_id == 1.0) {
+        lobe_mat = MAT_STEM; 
+    } else if (lobe_id == 2.0) {
+        // Pass the Retraction state safely into our new custom ID
+        lobe_mat = MAT_TENTACLE + clamp(retract_blend, 0.0, 0.99); 
+    }
+    
+    return vec2f(d * 0.45, lobe_mat);
 }
 
 
@@ -357,7 +393,7 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
     var d_min: f32 = 100.0;
     var final_mat: f32 = MAT_ROSE; 
     
-    for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
+    for (var i: f32 = 0.0; i <=1.0; i += 1.0) {
         for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
             let neighbor_offset = vec2f(i, j) * sign_p;
             let current_cell = cell + neighbor_offset;
@@ -365,7 +401,7 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let seed = hash12(current_cell);
             let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
             
-            let speed = 0.45 + seed * 0.25; 
+            let speed = 0.55 + seed * 0.25; 
             let start_h = 7.0 + seed2 * 1.0;
             let cycle_duration = 19.0;// + seed * 3.0; 
             
@@ -373,12 +409,12 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             
             // "Virtual" drop Y is where it WOULD be if it never slowed down
             let virtual_drop_y = start_h - (local_time * speed);
-            let ground_y = -0.0;// + seed * 0.06;
+            let ground_y = -0.45;// + seed * 0.06;
             let ground_dist = virtual_drop_y - ground_y;
             
             // --- 1. DISSOLVE EARLIER ---
             
-            var dissolve_progress = smoothstep(13,17, local_time);
+            var dissolve_progress = smoothstep(12,19, local_time);
             
            // if (dissolve_progress > 0.99) { continue; }
             
@@ -425,39 +461,36 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             q = opRotateY(q, rot_y);
             q = opRotateZ(q, rot_z);
             
-      // --- 4. SWISS CHEESE EROSION & 2D NOISE PROJECTION ---
+      // --- 4. SWISS CHEESE EROSION & NOISE PROJECTION ---
             let local_q = q / size; 
             let d_base = sdPetal(local_q, 0.32) * size;
             
-            // THE FIX: Dropped 'q.z' from the noise.
-            // By making it 2D, the noise pattern projects outward.
-            // The empty air in front of the red parts stays red, and the air in front of the white holes stays white.
-            let noise = (sin(local_q.x * 26.0) * sin(local_q.y * 19.0)* sin(local_q.z * 32.0)) * 0.5 + 0.5;
+            let noise = (sin(local_q.x * 6.0) * sin(local_q.y * 9.0)* sin(local_q.z * 2.0)) * 0.5 + 0.5;
 
-            let hole_size = dissolve_progress * 1.5; 
+            // THE FIX 1: Increased from 1.5 to 2.5 so the holes expand enough to aggressively eat 100% of the petal
+            let hole_size = dissolve_progress * 1.4; 
             let d_holes = (1.0 - noise) - hole_size; 
             
-            let d = max(d_base, -d_holes * size * 0.15); 
+            let d = max(d_base, -d_holes * size * 0.15) * 0.6;
             
             if (d < d_min) 
             {
                 d_min = d;
                 
                 if (dissolve_progress > 0.0) {
-                    let rim_thickness = 0.15;
+                    let rim_thickness = 0.05;
                     
-                    // IF WE ARE NEAR THE HOLE RIM OR INSIDE THE HOLE (White Fire)
                     if (d_holes < rim_thickness) {
-                        // Creates a gradient that is brightest exactly at the cut edge (d_holes = 0.0)
-                        let glow_intensity = smoothstep(rim_thickness, 0.0, max(0.0, d_holes));
-                        let final_fade = smoothstep(1.0, 0.8, dissolve_progress);
+                        // THE FIX 2: Replaced max(0.0, d_holes) with abs(d_holes).
+                        // This forces the glow to ONLY exist on the razor-thin physical edge.
+                        // The empty air inside the hole drops to 0.0, completely removing the "washed out blob" effect!
+                        let glow_intensity = smoothstep(rim_thickness, 0.0, abs(d_holes));
                         
-                        // We pack the intensity into the fraction so the surface shader knows how bright to be
-                        final_mat = MAT_DISSOLVE + clamp(glow_intensity * final_fade, 0.0, 0.99);
+                        // THE FIX 3: Removed 'final_fade' entirely.
+                        // The material will burn fiercely until the expanding holes completely erase the geometry.
+                        final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
                     } 
-                    // IF WE ARE ON THE SOLID BULK (Red Petal)
                     else {
-                        // Keeps it MAT_ROSE! This retains the red volumetric glow in the air.
                         let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                         let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
                         final_mat = MAT_ROSE + gradient;
@@ -659,10 +692,17 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     }
 
     let d_stem_d_leaf = smin(d_stem, d_leaf, 0.003);
-    
     var fin = smin(d_stem_d_leaf, d_spine, 0.01);
+    
+    // 1. Default the base geometry to the Stem material
     var material = MAT_STEM;
     
+    // 2. If the ray is physically closer to a leaf than the stem, switch it!
+    if (d_leaf < d_stem) {
+        material = MAT_LEAVES;
+    }
+    
+    // 3. If the ray is hitting a thorn, override everything else
     if (d_spine < d_stem_d_leaf) {
         material = MAT_THORNS; 
     }
@@ -736,19 +776,33 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
     let cutoff_height = 0.1; 
     d_bud = max(d_bud, pos.y - cutoff_height);
 
-    // Grab both distance (.x) and material (.y)
-    let rose_data = sdRose(pos + vec3f(0.0, -0.03, 0.0)); 
+   let rose_data = sdRose(pos + vec3f(0.0, -0.03, 0.0)); 
     let rose_dist = rose_data.x;
     
-    var d_greenery = smin(d_stem.x, d_sepals, 0.02);
-    d_greenery = smin(d_greenery, d_bud, 0.02);
+    // 1. Group the sepals and the bulb together
+    let d_bulb_and_sepals = smin(d_sepals, d_bud, 0.02);
 
-    let flower_final = min(rose_dist, d_greenery); 
+    // 2. Group all the greenery (stem + bulb/sepals)
+    let d_all_greenery = smin(d_stem.x, d_bulb_and_sepals, 0.02);
+
+    // 3. Final distance check against the rose petals
+    let flower_final = min(rose_dist, d_all_greenery); 
+    
+    // --- MATERIAL ASSIGNMENT LOGIC ---
+    
+    // Default to the stem's material (which could be MAT_STEM, MAT_LEAVES, or MAT_THORNS)
     var material = d_stem.y;
 
-    if(rose_dist < d_greenery) {
+    // If the ray is hitting the bulb or the sepals, force it to MAT_LEAVES
+    if (d_bulb_and_sepals < d_stem.x) {
+        material = MAT_LEAVES;
+    }
+
+    // If the ray is hitting the rose petals, override everything else
+    if(rose_dist < d_all_greenery) {
         material = rose_data.y; // This passes the MAT_ROSE + gradient forward!
     } 
+    
     return vec2f(flower_final, material);
 }
 
@@ -927,10 +981,14 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         if ( mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
             accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
         }
-         else if (mat_base == MAT_DISSOLVE) { 
-            // THE FIX: Multiply the bloom by mat_frac!
-            // Now the volumetric glow will smoothly fade out with the petal geometry.
-            accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 35.0)) * mat_frac; 
+        else if (mat_base == MAT_TENTACLE) { 
+            // Mix between the actual rose color and the dissolve color
+            let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
+            // Tight falloff (500.0) so the glow stays sharply on its own strand!
+            accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0)); 
+        }
+        else if (mat_base == MAT_DISSOLVE) { 
+            accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac; 
         }
 
         if (d < 0.001) { hit = true; break; }
@@ -975,7 +1033,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             spec_power = 0.3;
             
         } else if (abs(mat_base - MAT_STEM) < 0.1) {
-            albedo = vec3f(0.05, 0.1, 0.02) * 0.8;
+            albedo = vec3f(0.05, 0.1, 0.02) * 1.5;
             roughness = 180.0;   
             spec_power = 1.2;
              
@@ -992,8 +1050,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             
         } else if (abs(mat_base - MAT_DIRT) < 0.1) { 
             albedo = vec3f(0.0, 0.0, 0.0);  
-            roughness = 25.0;  
-            spec_power = 0.8;
+            roughness = 35.0;  
+            spec_power = 1.2;
 
         } else if (abs(mat_base - MAT_DISSOLVE) < 0.1) {
             let glow_intensity = mat_frac;
@@ -1011,10 +1069,24 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             roughness = 60.0;    
             spec_power = 0.5;
         }
+      else if (abs(mat_base - MAT_LEAVES) < 0.1) {
+            albedo = vec3f(0.05, 0.1, 0.02) * 0.8;
+            roughness = 180.0;   
+            spec_power = 1.2;
+            
+        } else if (abs(mat_base - MAT_TENTACLE) < 0.1) {
+            let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
+            
+            albedo = strand_color * 0.8; // Exactly matches the rose tip_color multiplier
+            roughness = 180.0;    
+            spec_power = 1.2;
+            rim_light = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.95;
+            emission = albedo * 0.2; // Perfectly matches the rose emission
+        }
 
         let ambient = vec3f(0.45) * albedo; 
         let diffuse_color = albedo * diff * vec3f(1.0, 0.95, 0.8);
-        let diffuse = diffuse_color * attenuation; 
+        let diffuse = diffuse_color * attenuation ;// *shadow
         let spec_angle = max(dot(normal, half_dir), 0.0);
         let specular = pow(spec_angle, roughness) * spec_power * attenuation; 
         
@@ -1024,7 +1096,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
    if (hit) {
         let hit_mat = floor(mat_id);
-        if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE) {
+        // Add MAT_TENTACLE here:
+        if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE || hit_mat == MAT_TENTACLE) {
             accumulated_glow *= 0.1; 
         }
     }
