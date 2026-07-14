@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Rabbitholes on DEPIS</title>
+    <link>http://localhost:1313/rabbithole/</link>
+    <description>Recent content in Rabbitholes on DEPIS</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
+    <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
+    <copyright>© 2026 DEPIS</copyright>
+    <lastBuildDate>Sun, 06 Jul 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/rabbithole/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>My contribution to Umbra Mortis</title>
+      <link>http://localhost:1313/rabbithole/umbramortiswork/</link>
+      <pubDate>Sun, 06 Jul 2025 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/rabbithole/umbramortiswork/</guid>
+      <description>Multiplayer zombie FPS made in UE5</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/umbramortiswork/cover.jpg" />
+    </item>
+    
+    <item>
+      <title>PEPI Engine Renderer </title>
+      <link>http://localhost:1313/rabbithole/pepirenderer/</link>
+      <pubDate>Wed, 04 Sep 2024 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/rabbithole/pepirenderer/</guid>
+      <description>DX12/DXR renderer built specifically for RTS games</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/pepirenderer/cover.png" />
+    </item>
+    
+    <item>
+      <title>My contribution on Galactic Goo </title>
+      <link>http://localhost:1313/rabbithole/galacticgoowork/</link>
+      <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/rabbithole/galacticgoowork/</guid>
+      <description></description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/rabbithole/galacticgoowork/cover.png" />
+    </item>
+    
+  </channel>
+</rss>

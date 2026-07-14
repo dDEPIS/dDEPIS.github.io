@@ -1,0 +1,95 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Projects on DEPIS</title>
+    <link>http://localhost:1313/projects/</link>
+    <description>Recent content in Projects on DEPIS</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
+    <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
+    <copyright>© 2026 DEPIS</copyright>
+    <lastBuildDate>Wed, 06 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/projects/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>UE Color Tools Plugin</title>
+      <link>http://localhost:1313/projects/ue5colortools/</link>
+      <pubDate>Wed, 06 Aug 2025 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/ue5colortools/</guid>
+      <description>UE5 plugin providing 3 color inspection tools: Vectorscope, Histogram, Waveform</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/ue5colortools/cover.png" />
+    </item>
+    
+    <item>
+      <title>Umbra Mortis</title>
+      <link>http://localhost:1313/projects/umbramortis/</link>
+      <pubDate>Sun, 06 Jul 2025 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/umbramortis/</guid>
+      <description>Multiplayer zombie FPS made in UE5</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/umbramortis/cover.jpg" />
+    </item>
+    
+    <item>
+      <title>Owlet / PEPI engine</title>
+      <link>http://localhost:1313/projects/owlet/</link>
+      <pubDate>Mon, 01 Jul 2024 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/owlet/</guid>
+      <description>RTS game made using the PEPI custom engine</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/owlet/cover.png" />
+    </item>
+    
+    <item>
+      <title>DXR Hybrid Ray tracer</title>
+      <link>http://localhost:1313/projects/hybridraytracer/</link>
+      <pubDate>Mon, 04 Dec 2023 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/hybridraytracer/</guid>
+      <description>A hybrid ray tracer built with DXR</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/hybridraytracer/cover.png" />
+    </item>
+    
+    <item>
+      <title>2D Ray Tracer</title>
+      <link>http://localhost:1313/projects/2draytracer/</link>
+      <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/2draytracer/</guid>
+      <description>2D Ray-Tracing renderer</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/2draytracer/cover.png" />
+    </item>
+    
+    <item>
+      <title>Galactic Goo </title>
+      <link>http://localhost:1313/projects/galacticgoo/</link>
+      <pubDate>Mon, 04 Sep 2023 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/galacticgoo/</guid>
+      <description>Puzzle-platform game made with UE5</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/galacticgoo/cover.png" />
+    </item>
+    
+    <item>
+      <title>2D RTS</title>
+      <link>http://localhost:1313/projects/2drts/</link>
+      <pubDate>Sun, 04 Sep 2022 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/2drts/</guid>
+      <description>2D RTS tank game</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/2drts/cover.png" />
+    </item>
+    
+    <item>
+      <title>3D RTS</title>
+      <link>http://localhost:1313/projects/3drts/</link>
+      <pubDate>Sun, 04 Sep 2022 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/3drts/</guid>
+      <description>3D RTS tank game on a raspbery PI</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/3drts/cover.png" />
+    </item>
+    
+  </channel>
+</rss>

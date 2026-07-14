@@ -217,7 +217,48 @@ fn smax(a: f32, b: f32, k: f32) -> f32 {
     return mix(a, b, h) + k * h * (1.0 - h);
 }
 
-
+fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
+    let repetitions = 7.0; // 7 creates an asymmetrical, organic look
+    let angle_step = 6.28318 / repetitions;
+    
+    // 1. Fold space in a circle around the Y axis
+    let a = atan2(p.z, p.x);
+    let sector = round(a / angle_step);
+    let new_angle = a - sector * angle_step;
+    
+    let dist = length(p.xz);
+    
+    // 2. Move the local coordinate out to the edge of the breathing hole
+    // We subtract 0.1 so the roots stay buried slightly inside the dirt edge
+    var q = vec3f( cos(new_angle) * dist - (hole_radius - 0.1), p.y, sin(new_angle) * dist );
+    
+    // 3. Define the length of the tentacle stretching outward along the X axis
+    let max_length = 1.3;
+    let h = clamp(q.x, 0.0, max_length); 
+    
+    // 4. The "Wild Aggressive" Animation
+    // We add the 'sector' ID to the time phase so they don't all writhe in unison
+    let phase = sector * 13.5;
+    
+    // Multiplying by 'h' forces the root to stay completely still, 
+    // while the tip swings wildly up/down and side-to-side.
+    let writhe_y = sin(time * 4.0 + h * 6.0 + phase) * 0.15 * h;
+    let writhe_z = cos(time * 3.1 + h * 5.0 + phase) * 0.15 * h;
+    
+    // Add a heavy gravity droop so they spill out over the concrete
+    let droop = h * h * 0.4;
+    
+    // 5. The Shape (A bending line segment)
+    let core_line = vec3f(h, writhe_y - droop, writhe_z);
+    
+    // Taper the thickness from 0.04 at the root to an infinitely sharp 0.0 point
+    let thickness = 0.04 * (1.0 - (h / max_length));
+    
+    let d = length(q - core_line) - thickness;
+    
+    // Safety multiplier of 0.6 because of the heavy domain warping (the writhing)
+    return vec2f(d * 0.6, MAT_STEM);
+}
 
 
 fn sdPetal(p: vec3f, s: f32) -> f32 {
@@ -325,27 +366,27 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
             
             let speed = 0.45 + seed * 0.25; 
-            let start_h = 5.0 + seed2 * 1.0;
-            let cycle_duration = 17.0;// + seed * 3.0; 
+            let start_h = 7.0 + seed2 * 1.0;
+            let cycle_duration = 19.0;// + seed * 3.0; 
             
-            let local_time = (time + seed * 70.0) % cycle_duration;
+            let local_time = (time + seed * 20.0) % cycle_duration;
             
             // "Virtual" drop Y is where it WOULD be if it never slowed down
             let virtual_drop_y = start_h - (local_time * speed);
-            let ground_y = -0.48;// + seed * 0.06;
+            let ground_y = -0.0;// + seed * 0.06;
             let ground_dist = virtual_drop_y - ground_y;
             
             // --- 1. DISSOLVE EARLIER ---
             
-            let dissolve_progress = smoothstep(0.9, 0.2, ground_dist);
+            var dissolve_progress = smoothstep(13,17, local_time);
             
-            if (dissolve_progress > 0.99) { continue; }
+           // if (dissolve_progress > 0.99) { continue; }
             
-            let size = 0.09 + seed * 0.06;
+            let size = 0.1 + seed * 0.04;
             
             // --- 2. THE SOFT LANDING ---
             var actual_y: f32 = virtual_drop_y;
-            let landing_zone = 0.7; // Starts slowing down 0.5 units above ground
+            let landing_zone = 0.5; // Starts slowing down 0.5 units above ground
             
             if (ground_dist < landing_zone && ground_dist > 0.0) {
                 // Map the distance to a 0.0 - 1.0 range, then apply a quadratic curve (t * t)
@@ -363,27 +404,65 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             q.x += sin(time * 1.5 + seed * 10.0) * 0.25 * wind_damp;
             q.z += cos(time * 1.2 + seed2 * 10.0) * 0.25 * wind_damp;
             
-            // Because 'actual_y' curves smoothly, the rotation naturally decelerates with it!
+            // --- 3. PERFECT HORIZONTAL LANDING ---
+            // Calculate how far the petal is from its final resting place
+            let resting_dist = max(0.0, actual_y - ground_y);
+            
+            // -1.57 radians is -90 degrees. This rotates the petal's face to lie perfectly flat on the ground.
+            let target_rot_x = 1.57;  //-1.57; 
+            let target_rot_z = 0.0; // Roll should be 0 so it doesn't clip into the dirt sideways
+            
+            // We rotate backwards from the flat target based on how high up in the air it is.
+            // As resting_dist smoothly shrinks to 0.0, the rotation smoothly locks into the target!
+            let rot_x = target_rot_x - (resting_dist * (2.5 + seed));
+            let rot_z = target_rot_z - (resting_dist * (1.0 + seed * 5.0));
+            
+            // Yaw (Y-axis) can spin normally so the petals land facing random directions
             let fall_progress = start_h - actual_y;
-            q = opRotateX(q, fall_progress * (2.5 + seed) + seed * 10.0);
-            q = opRotateY(q, fall_progress * 1.5 + seed * 20.0);
-            q = opRotateZ(q, fall_progress * 1.0 + seed * 5.0);
+            let rot_y = fall_progress * 1.5 + seed * 20.0;
             
-            let d_base = sdPetal(q / size, 0.32) * size;
+            q = opRotateX(q, rot_x);
+            q = opRotateY(q, rot_y);
+            q = opRotateZ(q, rot_z);
             
-            let noise = (  sin(q.x * 80.0) * sin(q.y * 50.0) * sin(q.z * 70.0))* 0.5 + 0.5;
-           let carve_amount = (dissolve_progress * 0.08) + (noise * dissolve_progress * 0.04);
-            let d = d_base + carve_amount;
+      // --- 4. SWISS CHEESE EROSION & 2D NOISE PROJECTION ---
+            let local_q = q / size; 
+            let d_base = sdPetal(local_q, 0.32) * size;
+            
+            // THE FIX: Dropped 'q.z' from the noise.
+            // By making it 2D, the noise pattern projects outward.
+            // The empty air in front of the red parts stays red, and the air in front of the white holes stays white.
+            let noise = (sin(local_q.x * 26.0) * sin(local_q.y * 19.0)* sin(local_q.z * 32.0)) * 0.5 + 0.5;
+
+            let hole_size = dissolve_progress * 1.5; 
+            let d_holes = (1.0 - noise) - hole_size; 
+            
+            let d = max(d_base, -d_holes * size * 0.15); 
             
             if (d < d_min) 
             {
                 d_min = d;
                 
                 if (dissolve_progress > 0.0) {
-                    let glow_intensity = smoothstep(0.4, 1.0, noise) * sin(dissolve_progress * 3.1415);
-                    final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
+                    let rim_thickness = 0.15;
+                    
+                    // IF WE ARE NEAR THE HOLE RIM OR INSIDE THE HOLE (White Fire)
+                    if (d_holes < rim_thickness) {
+                        // Creates a gradient that is brightest exactly at the cut edge (d_holes = 0.0)
+                        let glow_intensity = smoothstep(rim_thickness, 0.0, max(0.0, d_holes));
+                        let final_fade = smoothstep(1.0, 0.8, dissolve_progress);
+                        
+                        // We pack the intensity into the fraction so the surface shader knows how bright to be
+                        final_mat = MAT_DISSOLVE + clamp(glow_intensity * final_fade, 0.0, 0.99);
+                    } 
+                    // IF WE ARE ON THE SOLID BULK (Red Petal)
+                    else {
+                        // Keeps it MAT_ROSE! This retains the red volumetric glow in the air.
+                        let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
+                        let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
+                        final_mat = MAT_ROSE + gradient;
+                    }
                 } else {
-                    // Calculate gradient for falling petal based on its local coordinate 'q'
                     let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                     let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
                     final_mat = MAT_ROSE + gradient;
@@ -716,6 +795,14 @@ fn map(p_in: vec3f) -> vec2f {
     // and causing black rendering artifacts due to our aggressive Y-axis warping!
     var res = vec2f((p.y - ground_height) * 0.7, mat);
 
+
+// --- NEW: THE WRITHING TENTACLES ---
+    // Pass in your breathing hole_size so the roots track the edge perfectly!
+    let tentacles = sdTentacles(p, time, hole_size);
+    if (tentacles.x < res.x) {
+        res = tentacles;
+    }
+
     let flower_pos = vec3f(0.0, 2.0, 0.0);
 
     let d_t =  flower(p, flower_pos);
@@ -837,13 +924,13 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mat_base = floor(mat_id);
         let mat_frac = fract(mat_id); // EXTRACT IT HERE!
 
-        if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
+        if ( mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
             accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
         }
          else if (mat_base == MAT_DISSOLVE) { 
             // THE FIX: Multiply the bloom by mat_frac!
             // Now the volumetric glow will smoothly fade out with the petal geometry.
-            accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 1.0)) * mat_frac; 
+            accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 35.0)) * mat_frac; 
         }
 
         if (d < 0.001) { hit = true; break; }
@@ -950,7 +1037,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     // 3. Additive Volumetric Bloom (Applied SECOND)
     // The gathered light dust is added on top, piercing the darkness
-//    final_color += accumulated_glow;
+    final_color += accumulated_glow;
 
     // 4. Film Grain Noise
     let noise = hash12(pos.xy + uniforms.time);

@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8" standalone="yes"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
+  <channel>
+    <title>Articles on DEPIS</title>
+    <link>http://localhost:1313/articles/</link>
+    <description>Recent content in Articles on DEPIS</description>
+    <generator>Hugo -- gohugo.io</generator>
+    <language>en</language>
+    <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
+    <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
+    <copyright>© 2026 DEPIS</copyright>
+    <lastBuildDate>Wed, 25 Feb 2026 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/articles/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>UE Color Tools </title>
+      <link>http://localhost:1313/articles/uecolortoolsarticle/</link>
+      <pubDate>Wed, 25 Feb 2026 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/articles/uecolortoolsarticle/</guid>
+      <description>A summary of how I implemented the UE Color Tools plugin using the Scene View Extension.</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/uecolortoolsarticle/Thumbnail.png" />
+    </item>
+    
+    <item>
+      <title>Implementing a Hybrid Ray Tracer with DXR</title>
+      <link>http://localhost:1313/articles/hybridrtarticle/</link>
+      <pubDate>Mon, 04 Dec 2023 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/articles/hybridrtarticle/</guid>
+      <description>My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12.</description>
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/articles/hybridrtarticle/cover.png" />
+    </item>
+    
+  </channel>
+</rss>

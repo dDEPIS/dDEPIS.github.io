@@ -1,0 +1,2225 @@
+<!doctype html>
+<html
+  lang="en"
+  dir="ltr"
+  class="scroll-smooth"
+  data-default-appearance="dark"
+  data-auto-appearance="false"><head><script src="/livereload.js?mindelay=10&amp;v=2&amp;port=1313&amp;path=livereload" data-no-instant defer></script>
+  <meta charset="utf-8">
+  
+    <meta http-equiv="content-language" content="en">
+  
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="X-UA-Compatible" content="ie=edge">
+  <meta name="theme-color">
+
+  
+  <title>Implementing a Hybrid Ray Tracer with DXR &middot; DEPIS</title>
+    <meta name="title" content="Implementing a Hybrid Ray Tracer with DXR &middot; DEPIS">
+
+  
+  <meta name="description" content="My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12.">
+  <meta name="keywords" content="project,">
+  
+  
+  <link rel="canonical" href="http://localhost:1313/articles/hybridrtarticle/">
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    
+    
+  
+  
+  <link
+    type="text/css"
+    rel="stylesheet"
+    href="/css/main.bundle.min.63e20e2c28b936fd2442ff3430720821ae510b5d8569228a2327cc547499443a18be818560fce52cc9f986c9c1e5610bf417661273518897d57d5b7be7711707.css"
+    integrity="sha512-Y&#43;IOLCi5Nv0kQv80MHIIIa5RC12FaSKKIyfMVHSZRDoYvoGFYPzlLMn5hsnB5WEL9BdmEnNRiJfVfVt753EXBw==">
+
+  
+  
+  <script
+    type="text/javascript"
+    src="/js/appearance.min.516a16745bea5a9bd011138d254cc0fd3973cd55ce6e15f3dec763e7c7c2c7448f8fe7b54cca811cb821b0c7e12cd161caace1dd794ac3d34d40937cbcc9ee12.js"
+    integrity="sha512-UWoWdFvqWpvQERONJUzA/TlzzVXObhXz3sdj58fCx0SPj&#43;e1TMqBHLghsMfhLNFhyqzh3XlKw9NNQJN8vMnuEg=="></script>
+  
+  
+    
+    
+    
+  
+  
+  
+  
+  
+  
+  
+  
+  
+  
+    
+    <script
+      defer
+      type="text/javascript"
+      id="script-bundle"
+      src="/js/main.bundle.min.90867e4ceecde25580f418994053fd0749d446fd0e8f0028782793ec6434fb0945ecbfe21e6a8b2f788760c0ecc3663aacb155e42e4e73d79ebaebadecd201d2.js"
+      integrity="sha512-kIZ&#43;TO7N4lWA9BiZQFP9B0nURv0OjwAoeCeT7GQ0&#43;wlF7L/iHmqLL3iHYMDsw2Y6rLFV5C5Oc9eeuuut7NIB0g=="
+      data-copy="Copy"
+      data-copied="Copied"></script>
+  
+  
+    
+    <script src="/lib/zoom/zoom.min.umd.b4b722fcb5d42f34f52b30a92f3521b69f403ca9d96d0d6179eb537cb870f5d83fdf1fe836688d95d5c99fefbda4170487711006e56051fa67ea00da10521721.js" integrity="sha512-tLci/LXULzT1KzCpLzUhtp9APKnZbQ1heetTfLhw9dg/3x/oNmiNldXJn&#43;&#43;9pBcEh3EQBuVgUfpn6gDaEFIXIQ=="></script>
+  
+
+  
+  
+    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
+    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
+    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="manifest" href="/site.webmanifest">
+  
+
+  
+  
+  
+  
+  
+  
+
+  
+  <meta property="og:url" content="http://localhost:1313/articles/hybridrtarticle/">
+  <meta property="og:site_name" content="DEPIS">
+  <meta property="og:title" content="Implementing a Hybrid Ray Tracer with DXR">
+  <meta property="og:description" content="My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12.">
+  <meta property="og:locale" content="en">
+  <meta property="og:type" content="article">
+    <meta property="article:section" content="articles">
+    <meta property="article:published_time" content="2023-12-04T00:00:00+00:00">
+    <meta property="article:modified_time" content="2023-12-04T00:00:00+00:00">
+    <meta property="article:tag" content="Project">
+    <meta property="og:image" content="http://localhost:1313/articles/hybridrtarticle/cover.png">
+
+  
+  <meta name="twitter:card" content="summary_large_image">
+  <meta name="twitter:image" content="http://localhost:1313/articles/hybridrtarticle/cover.png">
+  <meta name="twitter:title" content="Implementing a Hybrid Ray Tracer with DXR">
+  <meta name="twitter:description" content="My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12.">
+
+  <script type="application/ld+json">
+  [{
+    "@context": "https://schema.org",
+    "@type": "Article",
+    "articleSection": "Articles",
+    "name": "Implementing a Hybrid Ray Tracer with DXR",
+    "headline": "Implementing a Hybrid Ray Tracer with DXR",
+    
+    "abstract": "My journey with learning how to implement a Hybrid Ray Tracer using DXR and DX12.",
+    "inLanguage": "en",
+    "url" : "http:\/\/localhost:1313\/articles\/hybridrtarticle\/",
+    "author" : {
+      "@type": "Person",
+      "name": "DEPIS"
+    },
+    "copyrightYear": "2023",
+    "dateCreated": "2023-12-04T00:00:00\u002b00:00",
+    "datePublished": "2023-12-04T00:00:00\u002b00:00",
+    
+    "dateModified": "2023-12-04T00:00:00\u002b00:00",
+    
+    "keywords": ["project"],
+    
+    "mainEntityOfPage": "true",
+    "wordCount": "3170"
+  }]
+  </script>
+
+
+
+  
+  
+    <meta name="author" content="DEPIS">
+  
+  
+    
+      
+        
+      
+    
+      
+        
+          <link href="https://github.com/dDEPIS" rel="me">
+        
+      
+    
+      
+        
+          <link href="https://ko-fi.com/depis" rel="me">
+        
+      
+    
+  
+
+  
+  
+
+<script src="/lib/jquery/jquery.slim.min.03cb160e3cfdb2667a2e2c80d283bebcf63ff8bbc4b629c9ab2babf6fae1d0c07ad470edae783efa4fabda2ac01c58d60e63b98b3c336be8208460f08f4354f5.js" integrity="sha512-A8sWDjz9smZ6LiyA0oO&#43;vPY/&#43;LvEtinJqyur9vrh0MB61HDtrng&#43;&#43;k&#43;r2irAHFjWDmO5izwza&#43;gghGDwj0NU9Q=="></script>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+  
+  
+
+  <script
+  async
+  src="https://www.googletagmanager.com/gtag/js?id=G-9Z7C786SCD"></script>
+<script>
+  window.dataLayer = window.dataLayer || [];
+  function gtag(){dataLayer.push(arguments);}
+  gtag('js', new Date());
+
+  gtag('config', 'G-9Z7C786SCD');
+</script>
+
+
+
+
+
+
+  
+  
+
+  
+  
+
+  
+  
+
+  
+  
+</head>
+<body
+    class="flex flex-col h-screen px-6 m-auto text-lg leading-7 max-w-7xl bg-neutral text-neutral-900 dark:bg-neutral-800 dark:text-neutral sm:px-14 md:px-24 lg:px-32 scrollbar-thin scrollbar-track-neutral-200 scrollbar-thumb-neutral-400 dark:scrollbar-track-neutral-800 dark:scrollbar-thumb-neutral-600">
+    <div id="the-top" class="absolute flex self-center">
+      <a
+        class="px-3 py-1 text-sm -translate-y-8 rounded-b-lg bg-primary-200 focus:translate-y-0 dark:bg-neutral-600"
+        href="#main-content">
+        <span class="font-bold text-primary-600 ltr:pr-2 rtl:pl-2 dark:text-primary-400">&darr;</span>
+        Skip to main content
+      </a>
+    </div>
+    
+    
+      
+
+
+
+
+
+
+
+
+
+
+
+
+
+<div
+  class="main-menu flex items-center justify-between px-4 py-6 sm:px-6 md:justify-start gap-x-3 pt-[2px] pr-0 pb-[3px] pl-0">
+  
+  
+
+  <div class="flex flex-1 items-center justify-between">
+    <nav class="flex space-x-3">
+      
+        <a href="/" class="text-base font-medium text-gray-500 hover:text-gray-900">
+          DEPIS
+        </a>
+      
+    </nav>
+    
+  <nav class="hidden md:flex items-center gap-x-5 md:ml-12 h-12">
+    
+      
+        
+  <a
+  href="/about/"
+  
+  class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+  
+  <p class="text-base font-medium" title="About Me">
+    About Me
+  </p>
+</a>
+
+
+
+      
+        
+  <a
+  href="/articles/"
+  
+  class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+  
+  <p class="text-base font-medium" title="Articles">
+    Articles
+  </p>
+</a>
+
+
+
+      
+        
+  <a
+  href="/projects/"
+  
+  class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+  
+  <p class="text-base font-medium" title="Projects">
+    Projects
+  </p>
+</a>
+
+
+
+      
+    
+
+    
+
+    
+
+    
+      <button
+        id="search-button"
+        aria-label="Search"
+        class="text-base hover:text-primary-600 dark:hover:text-primary-400"
+        title="Search (/)">
+        <span class="relative block icon"><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="search" class="svg-inline--fa fa-search fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg>
+</span>
+      </button>
+    
+
+    
+  </nav>
+
+    
+  <div class="flex md:hidden items-center gap-x-5 md:ml-12 h-12">
+    <span></span>
+
+    
+
+    
+
+    
+      <button
+        id="search-button-mobile"
+        aria-label="Search"
+        class="text-base hover:text-primary-600 dark:hover:text-primary-400"
+        title="Search (/)">
+        <span class="relative block icon"><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="search" class="svg-inline--fa fa-search fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg>
+</span>
+      </button>
+    
+
+    
+  </div>
+
+  </div>
+  
+  <div class="-my-2 md:hidden">
+    <div id="menu-button" class="block">
+      
+        <div class="cursor-pointer hover:text-primary-600 dark:hover:text-primary-400">
+          <span class="relative block icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512"><path fill="currentColor" d="M0 96C0 78.33 14.33 64 32 64H416C433.7 64 448 78.33 448 96C448 113.7 433.7 128 416 128H32C14.33 128 0 113.7 0 96zM0 256C0 238.3 14.33 224 32 224H416C433.7 224 448 238.3 448 256C448 273.7 433.7 288 416 288H32C14.33 288 0 273.7 0 256zM416 448H32C14.33 448 0 433.7 0 416C0 398.3 14.33 384 32 384H416C433.7 384 448 398.3 448 416C448 433.7 433.7 448 416 448z"/></svg>
+</span>
+        </div>
+        <div
+          id="menu-wrapper"
+          class="fixed inset-0 z-30 invisible w-screen h-screen m-0 overflow-auto transition-opacity opacity-0 cursor-default bg-neutral-100/50 backdrop-blur-sm dark:bg-neutral-900/50 pt-[5px]">
+          <ul
+            class="flex space-y-2 mt-3 flex-col items-end w-full px-6 py-6 mx-auto overflow-visible list-none ltr:text-right rtl:text-left max-w-7xl">
+            <li id="menu-close-button">
+              <span
+                class="cursor-pointer inline-block align-text-bottom hover:text-primary-600 dark:hover:text-primary-400">
+                <span class="relative block icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path fill="currentColor" d="M310.6 361.4c12.5 12.5 12.5 32.75 0 45.25C304.4 412.9 296.2 416 288 416s-16.38-3.125-22.62-9.375L160 301.3L54.63 406.6C48.38 412.9 40.19 416 32 416S15.63 412.9 9.375 406.6c-12.5-12.5-12.5-32.75 0-45.25l105.4-105.4L9.375 150.6c-12.5-12.5-12.5-32.75 0-45.25s32.75-12.5 45.25 0L160 210.8l105.4-105.4c12.5-12.5 32.75-12.5 45.25 0s12.5 32.75 0 45.25l-105.4 105.4L310.6 361.4z"/></svg>
+</span>
+              </span>
+            </li>
+
+            
+              
+  <li class="mt-1">
+  <a
+    href="/about/"
+    
+    class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+    
+    <p class="text-bg font-bg" title="About Me">
+      About Me
+    </p>
+  </a>
+</li>
+
+
+
+            
+              
+  <li class="mt-1">
+  <a
+    href="/articles/"
+    
+    class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+    
+    <p class="text-bg font-bg" title="Articles">
+      Articles
+    </p>
+  </a>
+</li>
+
+
+
+            
+              
+  <li class="mt-1">
+  <a
+    href="/projects/"
+    
+    class="flex items-center text-gray-500 hover:text-primary-600 dark:hover:text-primary-400">
+    
+    <p class="text-bg font-bg" title="Projects">
+      Projects
+    </p>
+  </a>
+</li>
+
+
+
+            
+
+          </ul>
+          
+        </div>
+      
+    </div>
+  </div>
+
+</div>
+
+
+
+
+
+    
+    <div class="relative flex flex-col grow">
+      <main id="main-content" class="grow">
+        
+  
+  <article>
+    
+    
+      
+      
+      
+      
+        
+
+
+    <div id="hero" class="h-[150px] md:h-[200px]"></div>
+  
+  <div class="fixed inset-x-0 top-0 h-[800px] single_hero_background nozoom">
+    
+    
+      
+    
+    <img
+      id="background-image"
+      src="/articles/hybridrtarticle/cover_hu_372538315dec6f77.png"
+      alt="Background Image"
+      class="absolute inset-0 w-full h-full object-cover">
+    <div
+      class="absolute inset-0 bg-gradient-to-t from-neutral dark:from-neutral-800 to-transparent mix-blend-normal"></div>
+    <div
+      class="absolute inset-0 opacity-60 bg-gradient-to-t from-neutral dark:from-neutral-800 to-neutral-100 dark:to-neutral-800 mix-blend-normal"></div>
+  </div>
+
+  
+    <div
+      id="background-blur"
+      class="fixed opacity-0 inset-x-0 top-0 h-full single_hero_background nozoom backdrop-blur-2xl"></div>
+    
+    
+    <script
+      type="text/javascript"
+      src="/js/background-blur.min.0ad33cb9c066f652728b2cc09c9ceaf32645544f48e8b6b38f120d86f433ed997da275a49e6151fe0176430c45376812708d84727f3f969101fb44a4345b3f34.js"
+      integrity="sha512-CtM8ucBm9lJyiyzAnJzq8yZFVE9I6LazjxINhvQz7Zl9onWknmFR/gF2QwxFN2gScI2Ecn8/lpEB&#43;0SkNFs/NA=="
+      data-target-id="background-blur"
+      data-image-id="background-image"
+      data-image-url="/articles/hybridrtarticle/cover.png"></script>
+  
+      
+    
+
+    
+    <header id="single_header" class="mt-5 max-w-prose">
+      
+        <ol class="text-sm text-neutral-500 dark:text-neutral-400 print:hidden">
+  
+  
+    
+  
+    
+  
+  <li class="hidden">
+    <a class="hover:underline decoration-neutral-300 dark:underline-neutral-600" href="/"
+      ></a
+    ><span class="px-1 text-primary-500">/</span>
+  </li>
+
+  
+  <li class="inline">
+    <a class="hover:underline decoration-neutral-300 dark:underline-neutral-600" href="/articles/"
+      >Articles</a
+    ><span class="px-1 text-primary-500">/</span>
+  </li>
+
+  
+  <li class="hidden">
+    <a class="hover:underline decoration-neutral-300 dark:underline-neutral-600" href="/articles/hybridrtarticle/"
+      >Implementing a Hybrid Ray Tracer with DXR</a
+    ><span class="px-1 text-primary-500">/</span>
+  </li>
+
+</ol>
+
+
+      
+      <h1 class="mt-0 text-4xl font-extrabold text-neutral-900 dark:text-neutral">
+        Implementing a Hybrid Ray Tracer with DXR
+      </h1>
+      <div class="mt-1 mb-6 text-base text-neutral-500 dark:text-neutral-400 print:hidden">
+        
+
+
+
+
+
+  
+  
+
+
+
+  
+
+  
+  
+  
+
+  
+  
+    
+  
+
+  
+    
+  
+
+  
+
+  
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+
+  <div class="flex flex-row flex-wrap items-center">
+    
+    
+      <time datetime="2023-12-04T00:00:00&#43;00:00">4 December 2023</time><span class="px-2 text-primary-500">&middot;</span><span>3170 words</span>
+    
+
+    
+    
+  </div>
+
+  
+
+  
+  
+
+  
+  
+
+
+
+      </div>
+      
+    </header>
+
+    
+    <section class="flex flex-col max-w-full mt-0 prose dark:prose-invert lg:flex-row">
+      
+      
+      
+      
+      
+        <div class="order-first lg:ml-auto px-0 lg:order-last ltr:lg:pl-8 rtl:lg:pr-8">
+          <div class="toc ltr:pl-5 rtl:pr-5 print:hidden lg:sticky lg:top-10">
+            
+              <details
+  open
+  id="TOCView"
+  class="toc-right mt-0 overflow-y-auto overscroll-contain scrollbar-thin scrollbar-track-neutral-200 scrollbar-thumb-neutral-400 dark:scrollbar-track-neutral-800 dark:scrollbar-thumb-neutral-600 rounded-lg ltr:-ml-5 ltr:pl-5 rtl:-mr-5 rtl:pr-5 hidden lg:block">
+  <summary
+    class="block py-1 text-lg font-semibold cursor-pointer bg-neutral-100 text-neutral-800 ltr:-ml-5 ltr:pl-5 rtl:-mr-5 rtl:pr-5 dark:bg-neutral-700 dark:text-neutral-100 lg:hidden">
+    Table of Contents
+  </summary>
+  <div
+    class="min-w-[220px] py-2 border-dotted ltr:-ml-5 ltr:border-l ltr:pl-5 rtl:-mr-5 rtl:border-r rtl:pr-5 dark:border-neutral-600">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#the-plan">The plan:</a></li>
+    <li><a href="#some-basic-theory">Some basic theory</a>
+      <ul>
+        <li><a href="#hybrid-ray-tracing">Hybrid Ray Tracing</a>
+          <ul>
+            <li><a href="#using-a-rasterizer-to-write-a-g-buffer">Using a rasterizer to write a G-Buffer</a></li>
+            <li><a href="#why-do-this">Why do this?</a></li>
+            <li><a href="#using-the-g-buffer-in-the-ray-tracer">Using the G-Buffer in the ray tracer</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#capabilities-of-this-ray-tracer">Capabilities of this Ray Tracer</a>
+      <ul>
+        <li><a href="#shadows">Shadows</a></li>
+        <li><a href="#ambient-occlusion">Ambient Occlusion</a></li>
+        <li><a href="#reflections-and-pbr">Reflections and PBR</a></li>
+        <li><a href="#firefly-reduction">Firefly reduction</a></li>
+      </ul>
+    </li>
+    <li><a href="#my-journey-implementing-all-this-in-dxr">My journey implementing all this in DXR</a>
+      <ul>
+        <li><a href="#setting-up-dxr">Setting up DXR</a></li>
+        <li><a href="#shadows-and-random-numbers-on-gpu">Shadows and Random numbers on GPU</a>
+          <ul>
+            <li><a href="#implementing-shadows">Implementing Shadows</a></li>
+            <li><a href="#random-numbers-on-the-gpu">Random numbers on the GPU</a></li>
+          </ul>
+        </li>
+        <li><a href="#reflections">Reflections</a>
+          <ul>
+            <li><a href="#tracing-the-reflection-ray">Tracing the Reflection Ray</a></li>
+            <li><a href="#light-contribution-and-cook-torrance-brdf">Light Contribution and Cook-Torrance BRDF</a></li>
+            <li><a href="#calculating-reflection-probabilities">Calculating Reflection Probabilities</a></li>
+            <li><a href="#integrating-contributions-for-final-pixel-color">Integrating Contributions for Final Pixel Color</a></li>
+          </ul>
+        </li>
+        <li><a href="#hybrid-pipeline">Hybrid pipeline</a>
+          <ul>
+            <li><a href="#binding-render-targets-and-managing-resource-states">Binding Render Targets and Managing Resource States</a></li>
+            <li><a href="#preparing-for-ray-tracing">Preparing for Ray Tracing</a></li>
+            <li><a href="#utilizing-the-g-buffer">Utilizing the G-Buffer</a></li>
+          </ul>
+        </li>
+        <li><a href="#ambient-occlusion-1">Ambient Occlusion</a>
+          <ul>
+            <li><a href="#generating-rays-for-ambient-occlusion">Generating Rays for Ambient Occlusion</a></li>
+          </ul>
+        </li>
+        <li><a href="#firefly-reduction-1">Firefly Reduction</a></li>
+      </ul>
+    </li>
+    <li><a href="#conclusions">Conclusions</a></li>
+  </ul>
+</nav>
+  </div>
+</details>
+<details class="toc-inside mt-0 overflow-hidden rounded-lg ltr:-ml-5 ltr:pl-5 rtl:-mr-5 rtl:pr-5 lg:hidden">
+  <summary
+    class="py-1 text-lg font-semibold cursor-pointer bg-neutral-100 text-neutral-800 ltr:-ml-5 ltr:pl-5 rtl:-mr-5 rtl:pr-5 dark:bg-neutral-700 dark:text-neutral-100 lg:hidden">
+    Table of Contents
+  </summary>
+  <div
+    class="py-2 border-dotted border-neutral-300 ltr:-ml-5 ltr:border-l ltr:pl-5 rtl:-mr-5 rtl:border-r rtl:pr-5 dark:border-neutral-600">
+    <nav id="TableOfContents">
+  <ul>
+    <li><a href="#overview">Overview</a></li>
+    <li><a href="#the-plan">The plan:</a></li>
+    <li><a href="#some-basic-theory">Some basic theory</a>
+      <ul>
+        <li><a href="#hybrid-ray-tracing">Hybrid Ray Tracing</a>
+          <ul>
+            <li><a href="#using-a-rasterizer-to-write-a-g-buffer">Using a rasterizer to write a G-Buffer</a></li>
+            <li><a href="#why-do-this">Why do this?</a></li>
+            <li><a href="#using-the-g-buffer-in-the-ray-tracer">Using the G-Buffer in the ray tracer</a></li>
+          </ul>
+        </li>
+      </ul>
+    </li>
+    <li><a href="#capabilities-of-this-ray-tracer">Capabilities of this Ray Tracer</a>
+      <ul>
+        <li><a href="#shadows">Shadows</a></li>
+        <li><a href="#ambient-occlusion">Ambient Occlusion</a></li>
+        <li><a href="#reflections-and-pbr">Reflections and PBR</a></li>
+        <li><a href="#firefly-reduction">Firefly reduction</a></li>
+      </ul>
+    </li>
+    <li><a href="#my-journey-implementing-all-this-in-dxr">My journey implementing all this in DXR</a>
+      <ul>
+        <li><a href="#setting-up-dxr">Setting up DXR</a></li>
+        <li><a href="#shadows-and-random-numbers-on-gpu">Shadows and Random numbers on GPU</a>
+          <ul>
+            <li><a href="#implementing-shadows">Implementing Shadows</a></li>
+            <li><a href="#random-numbers-on-the-gpu">Random numbers on the GPU</a></li>
+          </ul>
+        </li>
+        <li><a href="#reflections">Reflections</a>
+          <ul>
+            <li><a href="#tracing-the-reflection-ray">Tracing the Reflection Ray</a></li>
+            <li><a href="#light-contribution-and-cook-torrance-brdf">Light Contribution and Cook-Torrance BRDF</a></li>
+            <li><a href="#calculating-reflection-probabilities">Calculating Reflection Probabilities</a></li>
+            <li><a href="#integrating-contributions-for-final-pixel-color">Integrating Contributions for Final Pixel Color</a></li>
+          </ul>
+        </li>
+        <li><a href="#hybrid-pipeline">Hybrid pipeline</a>
+          <ul>
+            <li><a href="#binding-render-targets-and-managing-resource-states">Binding Render Targets and Managing Resource States</a></li>
+            <li><a href="#preparing-for-ray-tracing">Preparing for Ray Tracing</a></li>
+            <li><a href="#utilizing-the-g-buffer">Utilizing the G-Buffer</a></li>
+          </ul>
+        </li>
+        <li><a href="#ambient-occlusion-1">Ambient Occlusion</a>
+          <ul>
+            <li><a href="#generating-rays-for-ambient-occlusion">Generating Rays for Ambient Occlusion</a></li>
+          </ul>
+        </li>
+        <li><a href="#firefly-reduction-1">Firefly Reduction</a></li>
+      </ul>
+    </li>
+    <li><a href="#conclusions">Conclusions</a></li>
+  </ul>
+</nav>
+  </div>
+</details>
+
+
+
+            
+            
+          </div>
+        </div>
+      
+
+
+      <div class="min-w-0 min-h-0 max-w-fit">
+        
+
+        <div class="article-content max-w-prose mb-20">
+          
+<h2 class="relative group">Overview 
+    <div id="overview" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#overview" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+<p>If you&rsquo;re here, I&rsquo;m assuming you&rsquo;re interested ray tracing. Cool. This article documents the creation of Hybrid RayTracer, which proved to be a great learning exercise when it comes to DX12, Ray Tracing and rendering in general.</p>
+<p>I am going to describe my journey and the concepts I learned, along with the problems I encountered.</p>
+<p>This project was my first experience with 3D ray tracing (and DXR), so please take all the information with a grain of salt.</p>
+<p>If you are not experienced, I recommend  watching <a
+  href="https://youtu.be/gsZiJeaMO48?si=df69GYvIGPf6hsHx"
+    target="_blank"
+  >this video</a> as an introduction to ray tracing. While my article lays down the fundamental concepts, additional visual context can enhance your understanding.</p>
+<p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="shadow" src="../hybridrtarticle/All.png">
+
+  
+</figure>
+</p>
+
+<h2 class="relative group">The plan: 
+    <div id="the-plan" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#the-plan" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+<p>My focus was on building a ray tracer that would run in real time. For that purpose, I chose to implement the following features:</p>
+<ul>
+<li>
+<p><strong>Hybrid Pipeline</strong></p>
+</li>
+<li>
+<p><strong>Shadows</strong></p>
+</li>
+<li>
+<p><strong>Reflections</strong></p>
+</li>
+<li>
+<p><strong>Ambient Occlusion</strong></p>
+</li>
+<li>
+<p>Refractions</p>
+</li>
+<li>
+<p>Support for multiple lights</p>
+</li>
+</ul>
+<p><strong>In the limited time I had (8 weeks), I only managed to implement the bolded features above.</strong></p>
+
+<h2 class="relative group">Some basic theory 
+    <div id="some-basic-theory" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#some-basic-theory" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+
+<h3 class="relative group">Hybrid Ray Tracing 
+    <div id="hybrid-ray-tracing" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#hybrid-ray-tracing" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>A hybrid ray tracing pipeline involves a rasterization pass, creating a G-Buffer for scene reconstruction in the ray tracer.</p>
+
+<h4 class="relative group">Using a rasterizer to write a G-Buffer 
+    <div id="using-a-rasterizer-to-write-a-g-buffer" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#using-a-rasterizer-to-write-a-g-buffer" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>A G-Buffer comprises multiple textures that hold data about the scene’s geometry from the camera&rsquo;s viewpoint. This step uses a rasterizer to render multiple render targets containing screen space information about the scene.</p>
+<p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="Hybrid" src="../hybridrtarticle/Hybrid_RTs.png">
+
+  
+</figure>
+</p>
+<p>For my project, I used four render targets to store the world positions of pixels, surface normals, albedo color, and material information (roughness and metallic properties).</p>
+
+<h4 class="relative group">Why do this? 
+    <div id="why-do-this" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#why-do-this" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>Rasterizers are fast, so leveraging a G-Buffer to avoid the need for primary rays(the rays traced from the camera towards the scene) in the ray tracer boosts performance, particularly on older hardware not optimized for ray tracing.</p>
+
+<h4 class="relative group">Using the G-Buffer in the ray tracer 
+    <div id="using-the-g-buffer-in-the-ray-tracer" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#using-the-g-buffer-in-the-ray-tracer" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>Normally, a ray has to be traced for each of the pixels on the screen, from the camera to the scene. Each ray has to be checked against the geometry in the scene and return values like color or distance.</p>
+<p>All of the data that that is collected with the primary rays, can also be collected from the G-Buffer with a lower performance cost.</p>
+<p>Textures in the ray generation shader access this data, aiding in tracing other ray types like shadow, reflection, and ambient occlusion rays.</p>
+
+<h2 class="relative group">Capabilities of this Ray Tracer 
+    <div id="capabilities-of-this-ray-tracer" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#capabilities-of-this-ray-tracer" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+<p>This distributed ray tracer traces multiple samples for each effect and integrates their contributions.  While this process introduces noise due to its sthocastic nature, more samples yield results closer to realistic illumination. Past frame samples can also be used for refinement.</p>
+
+<h3 class="relative group">Shadows 
+    <div id="shadows" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#shadows" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>Realistic shadows require a smooth falloff, as lights in reality are not point sources but areas, causing the light to fall unevenly around an object&rsquo;s shadow, making it softer towards the edges.</p>
+<p>Soft shadows and are achieved by tracing multiple samples towards the light source. Each ray targets a random point on the light source, making edge-near samples less likely to intersect the shadow-casting object.</p>
+<p>By summing up all the sampled results, the shadow becomes smoother towards the edges.</p>
+<iframe frameborder="0" class="juxtapose" width="100%" height="495.9513358778626" src="https://cdn.knightlab.com/libs/juxtapose/latest/embed/index.html?uid=eaad38e4-bae0-11ee-9ddd-3f41531135b6"></iframe>
+
+<h3 class="relative group">Ambient Occlusion 
+    <div id="ambient-occlusion" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#ambient-occlusion" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>Ambient occlusion helps with defining the environmental occlusion of the ambiental light. This is achieved by tracing rays in random directions from a surface and using the number of hits and the distances to impacted geometry to determine surface occlusion.</p>
+<p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="ao" src="../hybridrtarticle//AO.png">
+
+  
+</figure>
+</p>
+
+<h3 class="relative group">Reflections and PBR 
+    <div id="reflections-and-pbr" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#reflections-and-pbr" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>The reflections are the part of indirect lighting, that are affected by the angle of incidence(between the light ray and the surface normal) and the angle of the camera relative to the reflected ray.</p>
+<p>In ray tracing, light calculation is reversed compared to real life. A ray sent from the camera to a surface uses the angle with the surface normal to compute the reflected ray, which then interacts with other illuminated geometry.</p>
+<p>PBR (Physically Based Rendering) enhances realism. It defines material properties with two values: roughness and metallic. The Cook-Torrance microfacet model, a widely used illumination model, considers surfaces as collections of tiny, perfectly reflecting microfacets.</p>
+<p>Roughness affects the scattering of these microfacet angles. In ray tracing, this translates to sampling random microfacet directions, with the distribution based on a mathematical formula. We then use the angle of the microfacets instead of the surface normal, to calculate the reflected rays.  Different angles lead to varied light contributions, altering the material&rsquo;s appearance.</p>
+<p>The metallic value influences each reflection ray&rsquo;s contribution.</p>
+<p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="reflections" src="../hybridrtarticle//Reflections.png">
+
+  
+</figure>
+</p>
+
+<h3 class="relative group">Firefly reduction 
+    <div id="firefly-reduction" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#firefly-reduction" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>Firefly reduction is a method of filtering noise, targeting the elimination of abnormally bright pixels. These bright spots, often referred to as &lsquo;fireflies&rsquo;, arise from sampling directions that, while low in probability, yield disproportionately high energy. This could employ loss of energy throughout the scene, since removing the bright pixels means removal of energy. However, this loss could be a worthwhile sacrifice for the significant improvement it brings to the image quality.</p>
+<iframe frameborder="0" class="juxtapose" width="100%" height="546.3876923076923" src="https://cdn.knightlab.com/libs/juxtapose/latest/embed/index.html?uid=6fc215b2-baf1-11ee-9ddd-3f41531135b6"></iframe>
+
+<h2 class="relative group">My journey implementing all this in DXR 
+    <div id="my-journey-implementing-all-this-in-dxr" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#my-journey-implementing-all-this-in-dxr" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+
+<h3 class="relative group">Setting up DXR 
+    <div id="setting-up-dxr" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#setting-up-dxr" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>As a code base for this project, I used my previous DX12 rasterizer project.</p>
+<p>I started with my DX12 rasterizer project, setting up the DXR pipeline, shader tables, resource descriptor heap, and acceleration structures using NVIDIA&rsquo;s DXR helpers. <a
+  href="https://developer.nvidia.com/rtx/raytracing/dxr/dx12-raytracing-tutorial-part-1"
+    target="_blank"
+  >Here</a> you can find the Nvidia tutorials on doing all this.</p>
+<p>The helpers they provided had some issues with the shader table allignment, requiring manual adjustments in &ldquo;ShaderBindingTableGenerator.cpp&rdquo;, changing the miss shader entry size to allign to 64 bytes.</p>
+
+<h3 class="relative group">Shadows and Random numbers on GPU 
+    <div id="shadows-and-random-numbers-on-gpu" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#shadows-and-random-numbers-on-gpu" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>Once I reached this stage, I decided to deviate from my initial plan and prioritize the implementation of shadows. This approach would provide a feature to test the effectiveness of the hybrid pipeline.</p>
+
+<h4 class="relative group">Implementing Shadows 
+    <div id="implementing-shadows" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#implementing-shadows" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>To implement this, I used a function to generate a random point within  a unit sphere. This vector is then scaled by the size of the light source and added to the light&rsquo;s position.
+Using this calculated position, I determine the direction and length of the ray from the shaded surface to the random point.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">    <span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">sample_count</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="c1">//generating a random point in a sphere
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">float3</span> <span class="n">sphere</span> <span class="o">=</span> <span class="n">RandomInUnitSphere</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">7127</span> <span class="o">+</span> <span class="n">seed1</span><span class="p">,</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">20749</span> <span class="o">+</span> <span class="n">seed2</span><span class="p">,</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">6841</span> <span class="o">+</span> <span class="n">seed3</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="n">float3</span> <span class="n">lightPos</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">lightPos</span> <span class="o">=</span> <span class="n">light</span><span class="p">.</span><span class="n">light_position</span> <span class="o">+</span> <span class="n">sphere</span> <span class="o">*</span> <span class="n">light</span><span class="p">.</span><span class="n">size</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">float3</span> <span class="n">lightDir</span> <span class="o">=</span> <span class="n">lightPos</span> <span class="o">-</span> <span class="n">hitLocation</span><span class="p">;</span>
+</span></span></code></pre></div><p>I made sure to avoid calling a closest hit shader since it would be unnecessary (free performance!). I use 2 flags for the TraceRay function to bypass  unnecessary checks, resulting in only the miss shader being called, which returns a value of false.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl">   <span class="n">ShadowHitInfo</span> <span class="n">shadowPayload</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">shadowPayload</span><span class="p">.</span><span class="n">isHit</span> <span class="o">=</span> <span class="nb">true</span><span class="p">;</span> <span class="c1">// by default, isHit is set to true, and is only changed if the miss shader is executed
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">uint</span> <span class="n">rayFlags</span> <span class="o">=</span> <span class="n">RAY_FLAG_ACCEPT_FIRST_HIT_AND_END_SEARCH</span> <span class="o">|</span> <span class="n">RAY_FLAG_SKIP_CLOSEST_HIT_SHADER</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">TraceRay</span><span class="p">(</span><span class="n">SceneBVH</span><span class="p">,</span> <span class="n">rayFlags</span><span class="p">,</span> <span class="mh">0xFF</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="n">ray</span><span class="p">,</span> <span class="n">shadowPayload</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span></code></pre></div><p>When the miss shader is invoked, a counter tracking the hits is incremented. After iterating through all the samples, the counter is divided by the total number of samples, yielding the shadow&rsquo;s intensity at that specific surface point. This value is then multiplied with the direct illumination radiance.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl"><span class="c1">// incrementing the counter if no geometry is hit
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>       <span class="n">counter</span> <span class="o">+=</span> <span class="o">!</span><span class="n">shadowPayload</span><span class="p">.</span><span class="n">isHit</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">(</span><span class="kt">float</span><span class="p">(</span><span class="n">counter</span><span class="p">)</span> <span class="o">/</span> <span class="kt">float</span><span class="p">(</span><span class="n">sample_count</span><span class="p">));</span>
+</span></span></code></pre></div><p>In my project, I only have support for one single point light, which makes things much simpler. Here&rsquo;s some directions for <a
+  href="https://blog.traverseresearch.nl/fast-cdf-generation-on-the-gpu-for-light-picking-5c50b97c552b"
+    target="_blank"
+  >multiple light support</a>.</p>
+
+<h4 class="relative group">Random numbers on the GPU 
+    <div id="random-numbers-on-the-gpu" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#random-numbers-on-the-gpu" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>Generating random numbers presented a unique challenge, as I discovered HLSL lacks a built-in function for this purpose. Based on my research, the best function to do this would be a PCG HASH. It has both great distribution and is fast compared to other methods.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="n">uint</span> <span class="nf">pcg_hash</span><span class="p">(</span><span class="n">uint</span> <span class="n">input</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">    <span class="n">uint</span> <span class="n">state</span> <span class="o">=</span> <span class="n">input</span> <span class="o">*</span> <span class="mi">747796405u</span> <span class="o">+</span> <span class="mi">2891336453u</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">uint</span> <span class="n">word</span> <span class="o">=</span> <span class="p">((</span><span class="n">state</span> <span class="o">&gt;&gt;</span> <span class="p">((</span><span class="n">state</span> <span class="o">&gt;&gt;</span> <span class="mi">28u</span><span class="p">)</span> <span class="o">+</span> <span class="mi">4u</span><span class="p">))</span> <span class="o">^</span> <span class="n">state</span><span class="p">)</span> <span class="o">*</span> <span class="mi">277803737u</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">(</span><span class="n">word</span> <span class="o">&gt;&gt;</span> <span class="mi">22u</span><span class="p">)</span> <span class="o">^</span> <span class="n">word</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><p>This function returns pseudo-random numbers,  requiring a distinct seed for each pixel or sample to ensure randomness. Various elements can be used to construct this seed, such as the launch index of the ray(for good distribution,both x and y of the launch index should be used), or the world position of the fragment.</p>
+<p>For temporal accumulation, incorporating the frame index into the seed proved necessary. Additionally, varying the seed with each sample&rsquo;s index helps generate distinct values for each. To minimize correlation between these values, it&rsquo;s ideal to multiply the seed components with large prime numbers.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//precalculating the invariable part of the seed outside the loop 
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="kt">float</span> <span class="n">seed1</span> <span class="o">=</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">x</span> <span class="o">*</span> <span class="mi">4057</span> <span class="o">+</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">y</span> <span class="o">*</span> <span class="mi">17929</span> <span class="o">+</span> <span class="n">frame</span> <span class="o">*</span> <span class="mi">7919</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">seed2</span> <span class="o">=</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">x</span> <span class="o">*</span> <span class="mi">7919</span> <span class="o">+</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">y</span> <span class="o">*</span> <span class="mi">5801</span> <span class="o">+</span> <span class="n">frame</span> <span class="o">*</span> <span class="mi">4273</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">seed3</span> <span class="o">=</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">x</span> <span class="o">*</span> <span class="mi">5801</span> <span class="o">+</span> <span class="n">launchIndex</span><span class="p">.</span><span class="n">y</span> <span class="o">*</span> <span class="mi">7127</span> <span class="o">+</span> <span class="n">frame</span> <span class="o">*</span> <span class="mi">13591</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="k">for</span> <span class="p">(</span><span class="kt">int</span> <span class="n">i</span> <span class="o">=</span> <span class="mi">0</span><span class="p">;</span> <span class="n">i</span> <span class="o">&lt;</span> <span class="n">sample_count</span><span class="p">;</span> <span class="n">i</span><span class="o">++</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">      <span class="c1">//using the precalculated seed and the sample index
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>      <span class="n">float3</span> <span class="n">sphere</span> <span class="o">=</span> <span class="n">RandomInUnitSphere</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">7127</span> <span class="o">+</span> <span class="n">seed1</span><span class="p">,</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">20749</span> <span class="o">+</span> <span class="n">seed2</span><span class="p">,</span> <span class="n">i</span> <span class="o">*</span> <span class="mi">6841</span> <span class="o">+</span> <span class="n">seed3</span><span class="p">);</span>
+</span></span></code></pre></div>
+<h3 class="relative group">Reflections 
+    <div id="reflections" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#reflections" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>For the reflections, I used a GGX microfacet distribution function that would generate the normal of a microfacet within a cone. The angle of these microfacets is linked to the material&rsquo;s roughness. The generated microfacet is used to reflect the ray originating from the camera and then trace the ray in this newly calculated direction.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// the GGX distribution function for the rays 
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span><span class="n">float3</span> <span class="nf">GGXMicrofacet</span><span class="p">(</span><span class="n">uint</span> <span class="n">randSeed</span><span class="p">,</span> <span class="n">uint</span> <span class="n">randSeed2</span><span class="p">,</span> <span class="kt">float</span> <span class="n">roughness</span><span class="p">,</span> <span class="n">float3</span> <span class="n">normal</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">  <span class="c1">//generating random values based on the seed
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">float2</span> <span class="n">randVal</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">randVal</span><span class="p">.</span><span class="n">x</span> <span class="o">=</span> <span class="kt">float</span><span class="p">(</span><span class="n">pcg_hash</span><span class="p">(</span><span class="n">randSeed</span><span class="p">))</span> <span class="o">/</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">randVal</span><span class="p">.</span><span class="n">y</span> <span class="o">=</span> <span class="kt">float</span><span class="p">(</span><span class="n">pcg_hash</span><span class="p">(</span><span class="n">randSeed2</span><span class="p">))</span> <span class="o">/</span> <span class="mh">0xFFFFFFFF</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">  <span class="c1">//calculate tangent/bitangent based on the normal
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">float3</span> <span class="n">up</span> <span class="o">=</span> <span class="n">abs</span><span class="p">(</span><span class="n">normal</span><span class="p">.</span><span class="n">y</span><span class="p">)</span> <span class="o">&lt;</span> <span class="mf">0.999</span> <span class="o">?</span> <span class="n">float3</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)</span> <span class="o">:</span> <span class="n">float3</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="n">float3</span> <span class="n">tangent</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">cross</span><span class="p">(</span><span class="n">up</span><span class="p">,</span> <span class="n">normal</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">    <span class="n">float3</span> <span class="n">bitangent</span> <span class="o">=</span> <span class="n">cross</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="n">tangent</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="c1">//sample the normal distribution
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="kt">float</span> <span class="n">a</span> <span class="o">=</span> <span class="n">roughness</span> <span class="o">*</span> <span class="n">roughness</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">a2</span> <span class="o">=</span> <span class="n">a</span> <span class="o">*</span> <span class="n">a</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">cosThetaH</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="n">max</span><span class="p">(</span><span class="mf">0.0f</span><span class="p">,</span> <span class="p">(</span><span class="mf">1.0</span> <span class="o">-</span> <span class="n">randVal</span><span class="p">.</span><span class="n">x</span><span class="p">)</span> <span class="o">/</span> <span class="p">((</span><span class="n">a2</span> <span class="o">-</span> <span class="mf">1.0</span><span class="p">)</span> <span class="o">*</span> <span class="n">randVal</span><span class="p">.</span><span class="n">x</span> <span class="o">+</span> <span class="mi">1</span><span class="p">)));</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">sinThetaH</span> <span class="o">=</span> <span class="n">sqrt</span><span class="p">(</span><span class="n">max</span><span class="p">(</span><span class="mf">0.0f</span><span class="p">,</span> <span class="mf">1.0f</span> <span class="o">-</span> <span class="n">cosThetaH</span> <span class="o">*</span> <span class="n">cosThetaH</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">phiH</span> <span class="o">=</span> <span class="n">randVal</span><span class="p">.</span><span class="n">y</span> <span class="o">*</span> <span class="mf">3.14159f</span> <span class="o">*</span> <span class="mf">2.0f</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="n">tangent</span> <span class="o">*</span> <span class="p">(</span><span class="n">sinThetaH</span> <span class="o">*</span> <span class="n">cos</span><span class="p">(</span><span class="n">phiH</span><span class="p">))</span> <span class="o">+</span> <span class="n">bitangent</span> <span class="o">*</span> <span class="p">(</span><span class="n">sinThetaH</span> <span class="o">*</span> <span class="n">sin</span><span class="p">(</span><span class="n">phiH</span><span class="p">))</span> <span class="o">+</span> <span class="n">normal</span> <span class="o">*</span> <span class="n">cosThetaH</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span>
+</span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">  <span class="c1">//generate a microfacet
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">float3</span> <span class="n">H</span> <span class="o">=</span> <span class="n">GGXMicrofacet</span><span class="p">(</span><span class="n">pcg_hash</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">7127</span> <span class="o">+</span> <span class="n">rand1</span><span class="p">),</span> <span class="n">pcg_hash</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">20749</span> <span class="o">+</span> <span class="n">rand2</span><span class="p">),</span>
+</span></span><span class="line"><span class="cl">                                    <span class="n">roughness</span><span class="p">,</span> <span class="n">normal</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">  <span class="c1">//reflect the incident Ray(or the view ray)
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">float3</span> <span class="n">L</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="mf">2.f</span> <span class="o">*</span> <span class="n">dot</span><span class="p">(</span><span class="n">normalize</span><span class="p">(</span><span class="o">-</span><span class="n">incidentRay</span><span class="p">),</span> <span class="n">H</span><span class="p">)</span> <span class="o">*</span> <span class="n">H</span> <span class="o">-</span> <span class="n">normalize</span><span class="p">(</span><span class="o">-</span><span class="n">incidentRay</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">RayDesc</span> <span class="n">ray</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">Origin</span> <span class="o">=</span> <span class="n">hitLocation</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">Direction</span> <span class="o">=</span> <span class="n">L</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl">   <span class="c1">//trace the ray using the ray description
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">TraceRay</span><span class="p">(</span><span class="n">SceneBVH</span><span class="p">,</span> <span class="n">RAY_FLAG_NONE</span><span class="p">,</span> <span class="mh">0xFF</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">,</span> <span class="n">ray</span><span class="p">,</span> <span class="n">relfectionPayload</span><span class="p">);</span>
+</span></span></code></pre></div>
+<h4 class="relative group">Tracing the Reflection Ray 
+    <div id="tracing-the-reflection-ray" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#tracing-the-reflection-ray" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>When tracing the reflection ray, the hit shader returns the color and distance to the point of impact. Utilizing this distance, along with the ray&rsquo;s direction and origin, I calculated the precise location of the hit. This enabled me to trace additional shadow rays, making reflections more accurate. The traced shadows will be multiplied with the contribution of the ray, enriching the final illumination effect.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">        <span class="n">float3</span> <span class="n">r_hitLocation</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">r_hitLocation</span> <span class="o">=</span> <span class="n">hitLocation</span> <span class="o">+</span> <span class="n">L</span> <span class="o">*</span> <span class="n">relfectionPayload</span><span class="p">.</span><span class="n">colorAndDistance</span><span class="p">.</span><span class="n">w</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">shadow</span> <span class="o">=</span> <span class="n">TraceShadowRays</span><span class="p">(</span><span class="n">r_hitLocation</span><span class="p">,</span> <span class="n">reflected_shadow_SC</span><span class="p">,</span> <span class="n">launchIndex</span><span class="p">,</span> <span class="n">frame_index</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        
+</span></span></code></pre></div>
+<h4 class="relative group">Light Contribution and Cook-Torrance BRDF 
+    <div id="light-contribution-and-cook-torrance-brdf" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#light-contribution-and-cook-torrance-brdf" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>For the contribution of the incoming light, I used a Cook-Torrance BRDF(Bidirectional Reflectance Distribution Function ). This involved the computation of the GGX normal distribution, geometry factor, and Fresnel effect, key components that influence how light interacts with surfaces. More on PBR <a
+  href="https://graphicscompendium.com/gamedev/15-pbr"
+    target="_blank"
+  >here</a>.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// calculating all the dot products required for this BRDF
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="kt">float</span> <span class="n">NoV</span> <span class="o">=</span> <span class="n">clamp</span><span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="n">normalize</span><span class="p">(</span><span class="o">-</span><span class="n">incidentRay</span><span class="p">)),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">NoL</span> <span class="o">=</span> <span class="n">clamp</span><span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="n">L</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">NoH</span> <span class="o">=</span> <span class="n">clamp</span><span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="n">H</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">VoH</span> <span class="o">=</span> <span class="n">clamp</span><span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">normalize</span><span class="p">(</span><span class="o">-</span><span class="n">incidentRay</span><span class="p">),</span> <span class="n">H</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">LdotH</span> <span class="o">=</span> <span class="n">clamp</span><span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">L</span><span class="p">,</span> <span class="n">H</span><span class="p">),</span> <span class="mf">0.0</span><span class="p">,</span> <span class="mf">1.0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">float3</span> <span class="n">F</span> <span class="o">=</span> <span class="n">fresnelSchlick</span><span class="p">(</span><span class="n">VoH</span><span class="p">,</span> <span class="n">F0</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">D</span> <span class="o">=</span> <span class="n">DistributionGGX</span><span class="p">(</span><span class="n">NoH</span><span class="p">,</span> <span class="n">max</span><span class="p">(</span><span class="n">roughness</span><span class="p">,</span> <span class="mf">0.00001</span><span class="p">));</span>
+</span></span><span class="line"><span class="cl">        <span class="kt">float</span> <span class="n">G</span> <span class="o">=</span> <span class="n">GeometrySmith</span><span class="p">(</span><span class="n">NoV</span><span class="p">,</span> <span class="n">NoL</span><span class="p">,</span> <span class="n">roughness</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">float3</span> <span class="n">BRDF</span> <span class="o">=</span> <span class="n">D</span> <span class="o">*</span> <span class="n">F</span> <span class="o">*</span> <span class="n">G</span> <span class="o">/</span> <span class="n">max</span><span class="p">(</span><span class="mf">0.00001</span><span class="p">,</span> <span class="p">(</span><span class="mf">4.0</span> <span class="o">*</span> <span class="n">max</span><span class="p">(</span><span class="n">NoV</span><span class="p">,</span> <span class="mf">0.00001</span><span class="p">)</span> <span class="o">*</span> <span class="n">max</span><span class="p">(</span><span class="n">NoL</span><span class="p">,</span> <span class="mf">0.00001</span><span class="p">)));</span>
+</span></span></code></pre></div>
+<h4 class="relative group">Calculating Reflection Probabilities 
+    <div id="calculating-reflection-probabilities" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#calculating-reflection-probabilities" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>Achieving accurate reflections necessitated the calculation of probabilities for choosing specific directions for the reflection rays. For this, I utilized a probability density function based on the GGX distribution, ensuring that each reflection direction contributed to the final image with consideration to its likelihood.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"> <span class="kt">float</span> <span class="n">GGXProb</span> <span class="o">=</span> <span class="n">D</span> <span class="o">*</span> <span class="n">NoH</span> <span class="o">/</span> <span class="p">(</span><span class="mi">4</span> <span class="o">*</span> <span class="n">LdotH</span><span class="p">);</span>
+</span></span></code></pre></div>
+<h4 class="relative group">Integrating Contributions for Final Pixel Color 
+    <div id="integrating-contributions-for-final-pixel-color" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#integrating-contributions-for-final-pixel-color" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>After adding up all the contributions from all the samples, I divided the result by the number of samples. The returned value is added to the direct illumination, forming the final color of the pixel.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl"><span class="c1">//adding the sample contribution in the loop
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">color_r</span> <span class="o">=</span> <span class="n">color_r</span> <span class="o">+</span> <span class="n">relfectionPayload</span><span class="p">.</span><span class="n">colorAndDistance</span><span class="p">.</span><span class="n">rgb</span> <span class="o">*</span> <span class="p">(</span><span class="n">NoL</span> <span class="o">*</span> <span class="n">GGXBRDF</span> <span class="o">/</span> <span class="p">(</span><span class="n">GGXProb</span><span class="p">))</span> <span class="o">*</span> <span class="n">shadow</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="k">return</span> <span class="p">(</span><span class="n">color_r</span><span class="p">)</span> <span class="o">/</span> <span class="kt">float</span><span class="p">(</span><span class="n">reflection_SC</span><span class="p">);</span>
+</span></span></code></pre></div><p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="pbr" src="../hybridrtarticle/PBR.png">
+
+  
+</figure>
+</p>
+
+<h3 class="relative group">Hybrid pipeline 
+    <div id="hybrid-pipeline" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#hybrid-pipeline" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>For my hybrid pipeline, I am using 4 buffers. For each of them I stored one render target descriptor in a descriptor heap designated for render targets, and one UAV descriptor in the descriptor heap designated for the resources used in ray tracing pass(UAV&rsquo;s are nice because they allow both reading and writing).
+This way,I can use the same resource for both the rasterizer and for the ray tracer, without having to copy anything.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//Creating the RTV descriptors
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span> <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span> <span class="nf">rtvHandle</span><span class="p">(</span><span class="n">m_RTVDescriptorHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">());</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">m_posBuffer</span> <span class="o">=</span> 
+</span></span><span class="line"><span class="cl">        <span class="n">CreateRTVBuffer</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">rtvHandle</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">m_normalBuffer</span> <span class="o">=</span> <span class="n">CreateRTVBuffer</span><span class="p">(</span><span class="n">device</span><span class="p">,</span> <span class="n">rtvHandle</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="c1">//the same for all the other buffers
+</span></span></span></code></pre></div><div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//creating the UAV descriptors
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>            <span class="n">D3D12_CPU_DESCRIPTOR_HANDLE</span> <span class="n">srvHandle</span> <span class="o">=</span> <span class="n">m_srvUavHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">();</span>
+</span></span><span class="line"><span class="cl"><span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="n">D3D12_UNORDERED_ACCESS_VIEW_DESC</span> <span class="n">uavDesc</span> <span class="o">=</span> <span class="p">{};</span>
+</span></span><span class="line"><span class="cl">            <span class="n">uavDesc</span><span class="p">.</span><span class="n">ViewDimension</span> <span class="o">=</span> <span class="n">D3D12_UAV_DIMENSION_TEXTURE2D</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">            <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_Device</span><span class="o">-&gt;</span><span class="n">CreateUnorderedAccessView</span><span class="p">(</span><span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_posBuffer</span><span class="p">.</span><span class="n">Get</span><span class="p">(),</span> <span class="k">nullptr</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">uavDesc</span><span class="p">,</span> <span class="n">srvHandle</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">            <span class="n">srvHandle</span><span class="p">.</span><span class="n">ptr</span> <span class="o">+=</span>
+</span></span><span class="line"><span class="cl">                <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_Device</span><span class="o">-&gt;</span><span class="n">GetDescriptorHandleIncrementSize</span><span class="p">(</span><span class="n">D3D12_DESCRIPTOR_HEAP_TYPE_CBV_SRV_UAV</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">}</span><span class="c1">//this part is the same for all buffers
+</span></span></span></code></pre></div>
+<h4 class="relative group">Binding Render Targets and Managing Resource States 
+    <div id="binding-render-targets-and-managing-resource-states" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#binding-render-targets-and-managing-resource-states" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>The render targets integrated into the the pipeline through the OMSetRenderTargets function. It is crucial to accurately reference the position within the descriptor heap of the render targets when creating the CPU descriptor handles.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//creating an array of CPU descriptor handles for the buffers
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>     <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span> <span class="n">rtv</span><span class="p">[</span><span class="mi">4</span><span class="p">];</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtv</span><span class="p">[</span><span class="mi">0</span><span class="p">]</span> <span class="o">=</span> <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span><span class="p">(</span><span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">(),</span> <span class="mi">3</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorSize</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtv</span><span class="p">[</span><span class="mi">1</span><span class="p">]</span> <span class="o">=</span> <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span><span class="p">(</span><span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">(),</span> <span class="mi">4</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorSize</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtv</span><span class="p">[</span><span class="mi">2</span><span class="p">]</span> <span class="o">=</span> <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span><span class="p">(</span><span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">(),</span> <span class="mi">5</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorSize</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">      <span class="n">rtv</span><span class="p">[</span><span class="mi">3</span><span class="p">]</span> <span class="o">=</span> <span class="n">CD3DX12_CPU_DESCRIPTOR_HANDLE</span><span class="p">(</span><span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorHeap</span><span class="o">-&gt;</span><span class="n">GetCPUDescriptorHandleForHeapStart</span><span class="p">(),</span> <span class="mi">6</span><span class="p">,</span>
+</span></span><span class="line"><span class="cl">                                                <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_RTVDescriptorSize</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="c1">// binding them to the pipeline
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">GetCommandList</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">OMSetRenderTargets</span><span class="p">(</span><span class="n">_countof</span><span class="p">(</span><span class="n">rtv</span><span class="p">),</span> <span class="n">rtv</span><span class="p">,</span> <span class="n">FALSE</span><span class="p">,</span> <span class="o">&amp;</span><span class="n">dsvHandle</span><span class="p">);</span>
+</span></span></code></pre></div><p>For developers utilizing ImGUI, it&rsquo;s important to bind your back buffers using OMSetRenderTargets before executing the rendering process for ImGUI.</p>
+<p>An important aspect of managing these resources is the transition of their states. Post-rasterization, the resource states are shifted from RTV (Render Target View) to UAV, and then reverted to the RTV state after the ray tracing pass.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//transitioning the resource states
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span> <span class="n">CD3DX12_RESOURCE_BARRIER</span> <span class="n">barrierrr5</span> <span class="o">=</span> <span class="n">CD3DX12_RESOURCE_BARRIER</span><span class="o">::</span><span class="n">Transition</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">        <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_posBuffer</span><span class="p">.</span><span class="n">Get</span><span class="p">(),</span> <span class="n">D3D12_RESOURCE_STATE_RENDER_TARGET</span><span class="p">,</span> <span class="n">D3D12_RESOURCE_STATE_UNORDERED_ACCESS</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">    <span class="n">CD3DX12_RESOURCE_BARRIER</span> <span class="n">barrierrr6</span> <span class="o">=</span> <span class="n">CD3DX12_RESOURCE_BARRIER</span><span class="o">::</span><span class="n">Transition</span><span class="p">(</span>
+</span></span><span class="line"><span class="cl">        <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">m_normalBuffer</span><span class="p">.</span><span class="n">Get</span><span class="p">(),</span> <span class="n">D3D12_RESOURCE_STATE_RENDER_TARGET</span><span class="p">,</span> <span class="n">D3D12_RESOURCE_STATE_UNORDERED_ACCESS</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl"><span class="p">...</span>
+</span></span><span class="line"><span class="cl">    <span class="p">{</span>
+</span></span><span class="line"><span class="cl">        <span class="n">D3D12_RESOURCE_BARRIER</span> <span class="n">barriers</span><span class="p">[</span><span class="mi">5</span><span class="p">]</span> <span class="o">=</span> <span class="p">{</span><span class="n">barrierrr5</span><span class="p">,</span> <span class="n">barrierrr6</span><span class="p">,</span> <span class="n">barrierrr7</span><span class="p">,</span> <span class="n">barrierrr8</span><span class="p">,</span> <span class="n">barrierrr9</span><span class="p">};</span>
+</span></span><span class="line"><span class="cl">
+</span></span><span class="line"><span class="cl">        <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">GetCommandList</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">ResourceBarrier</span><span class="p">(</span><span class="mi">5</span><span class="p">,</span> <span class="n">barriers</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">    <span class="p">}</span>
+</span></span></code></pre></div>
+<h4 class="relative group">Preparing for Ray Tracing 
+    <div id="preparing-for-ray-tracing" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#preparing-for-ray-tracing" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>Prior to calling DispatchRays, the descriptor heap containing the views for the necessary resources must be bound to the pipeline. This step is crucial for the seamless functioning of the ray tracing process.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl">    <span class="n">std</span><span class="o">::</span><span class="n">vector</span><span class="o">&lt;</span><span class="n">ID3D12DescriptorHeap</span><span class="o">*&gt;</span> <span class="n">heaps</span> <span class="o">=</span> <span class="p">{</span><span class="n">m_resource_manager</span><span class="o">-&gt;</span><span class="n">m_srvUavHeap</span><span class="p">.</span><span class="n">Get</span><span class="p">()};</span>
+</span></span><span class="line"><span class="cl">    <span class="n">m_device_manager</span><span class="o">-&gt;</span><span class="n">GetCommandList</span><span class="p">()</span><span class="o">-&gt;</span><span class="n">SetDescriptorHeaps</span><span class="p">(</span><span class="k">static_cast</span><span class="o">&lt;</span><span class="n">UINT</span><span class="o">&gt;</span><span class="p">(</span><span class="n">heaps</span><span class="p">.</span><span class="n">size</span><span class="p">()),</span> <span class="n">heaps</span><span class="p">.</span><span class="n">data</span><span class="p">());</span>
+</span></span></code></pre></div>
+<h4 class="relative group">Utilizing the G-Buffer 
+    <div id="utilizing-the-g-buffer" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#utilizing-the-g-buffer" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>An efficient approach in this pipeline is the use of the G-Buffer as an SRV (Shader Resource View) during the ray tracing pass. Given that no writing is performed on these resources at this stage, an UAV is not necessary.</p>
+<p>Accessing the G-Buffer in the ray generation shader is very convenient. The texture is declared as an array, with the offset from the first UAV in the descriptor heap serving as an index to access the desired texture.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="n">RWTexture2D</span><span class="o">&lt;</span><span class="n">float4</span><span class="o">&gt;</span> <span class="n">uavTextures</span><span class="p">[]</span> <span class="o">:</span> <span class="k">register</span><span class="p">(</span><span class="n">u0</span><span class="p">);</span>
+</span></span></code></pre></div><p>The data collected from the texture is then used for the computation of the shadows, reflections, ambient occlusion and direct lighting.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">// extracting the data from the shaders
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>    <span class="n">float3</span> <span class="n">hitLocation</span> <span class="o">=</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">1</span><span class="p">][</span><span class="n">launchIndex</span><span class="p">].</span><span class="n">rgb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">float3</span> <span class="n">albedo</span> <span class="o">=</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">3</span><span class="p">][</span><span class="n">launchIndex</span><span class="p">].</span><span class="n">rgb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="n">float3</span> <span class="n">norm</span> <span class="o">=</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">2</span><span class="p">][</span><span class="n">launchIndex</span><span class="p">].</span><span class="n">rgb</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">roughness</span> <span class="o">=</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">4</span><span class="p">][</span><span class="n">launchIndex</span><span class="p">].</span><span class="n">g</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">    <span class="kt">float</span> <span class="n">metallic</span> <span class="o">=</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">4</span><span class="p">][</span><span class="n">launchIndex</span><span class="p">].</span><span class="n">b</span><span class="p">;</span>
+</span></span></code></pre></div>
+<h3 class="relative group">Ambient Occlusion 
+    <div id="ambient-occlusion-1" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#ambient-occlusion-1" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>Ambient occlusion was the simplest feature to implement, yet it&rsquo;s a feature with a great impact, adding depth and realism to the scene.</p>
+
+<h4 class="relative group">Generating Rays for Ambient Occlusion 
+    <div id="generating-rays-for-ambient-occlusion" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#generating-rays-for-ambient-occlusion" aria-label="Anchor">#</a>
+    </span>        
+    
+</h4>
+<p>The process begins with the generation of a random point on a hemisphere, oriented around the surface normal at each point of the geometry. The ray is traced in the direction of these generated points.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//generate random direction in the hemisphere
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>       <span class="n">float3</span> <span class="n">dir</span> <span class="o">=</span> <span class="n">RandomInHemisphere</span><span class="p">(</span><span class="n">normal</span><span class="p">,</span> <span class="kt">float</span><span class="p">(</span><span class="n">pcg_hash</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">7127</span> <span class="o">+</span> <span class="n">randAo1</span><span class="p">)),</span> <span class="kt">float</span><span class="p">(</span><span class="n">pcg_hash</span><span class="p">(</span><span class="n">i</span> <span class="o">*</span> <span class="mi">20749</span> <span class="o">+</span> <span class="n">randAo2</span><span class="p">)));</span>
+</span></span><span class="line"><span class="cl"><span class="c1">// set the ray description
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="n">RayDesc</span> <span class="n">ray</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">Origin</span> <span class="o">=</span> <span class="n">hitLocation</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">Direction</span> <span class="o">=</span> <span class="n">normalize</span><span class="p">(</span><span class="n">dir</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">TMin</span> <span class="o">=</span> <span class="mf">0.01f</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">        <span class="n">ray</span><span class="p">.</span><span class="n">TMax</span> <span class="o">=</span> <span class="n">g_RayLength</span><span class="p">;</span>
+</span></span></code></pre></div><ul>
+<li>
+<p>No Hit Scenario: If a ray does not intersect with any geometry, it indicates that the point is unobstructed and receives full ambient light. In such cases, a counter is incremented by 1, representing complete exposure to ambient light.</p>
+</li>
+<li>
+<p>Hit Scenario: When a ray intersects with geometry, the hit shader returns the distance to the point of impact. This distance is used to calculate the amount of occlusion. The counter is incremented by the ratio between the returned distance and the ray&rsquo;s maximum length.</p>
+</li>
+</ul>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//calculate the contribution of every ray based on distance
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="k">if</span> <span class="p">(</span><span class="n">aoPayload</span><span class="p">.</span><span class="n">distance</span> <span class="o">&gt;</span> <span class="mi">0</span><span class="p">)</span><span class="c1">// the miss shader returns -1, the hit shader returns the  actual distance
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>        <span class="p">{</span>
+</span></span><span class="line"><span class="cl">            <span class="kt">float</span> <span class="n">occlusionFactor</span> <span class="o">=</span> <span class="p">(</span><span class="n">aoPayload</span><span class="p">.</span><span class="n">distance</span> <span class="o">/</span> <span class="n">g_RayLength</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="n">occlusion</span> <span class="o">+=</span> <span class="n">pow</span><span class="p">(</span><span class="n">occlusionFactor</span><span class="p">,</span> <span class="n">g_OcclusionPower</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">        <span class="p">}</span>
+</span></span><span class="line"><span class="cl">        <span class="k">else</span> 
+</span></span><span class="line"><span class="cl">            <span class="n">occlusion</span> <span class="o">+=</span> <span class="mi">1</span><span class="p">;</span>
+</span></span></code></pre></div><p>The counter is then divided by the number of samples and the returned result is then multiplied with the direct illumination radiance.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"> <span class="n">final_color</span> <span class="o">=</span> <span class="n">radiance</span> <span class="o">*</span> <span class="n">shadow</span> <span class="o">*</span> <span class="n">ambient_occlusion</span> <span class="o">+</span> <span class="n">reflection</span> <span class="o">+</span> <span class="n">emissive</span><span class="p">;</span>
+</span></span></code></pre></div>
+<h3 class="relative group">Firefly Reduction 
+    <div id="firefly-reduction-1" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#firefly-reduction-1" aria-label="Anchor">#</a>
+    </span>        
+    
+</h3>
+<p>I used a very crude algorithm that uses the brightness of the surrounding pixels. I only cap the brightness of the reflection, since that is the only effect that creates fireflies in my application.</p>
+<p>This algorithm uses an user input value as a threshold, to keep the pixels that are not bright from being changed. I calculate average color for the surrounding pixels and then I used the value to bring the bright value of the current pixel down.</p>
+<div class="highlight"><pre tabindex="0" class="chroma"><code class="language-cpp" data-lang="cpp"><span class="line"><span class="cl"><span class="c1">//check the brightness of our current pixel
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span> <span class="k">if</span> <span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">reflection</span><span class="p">,</span> <span class="n">reflection</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">firefly_reduction</span><span class="p">)</span>
+</span></span><span class="line"><span class="cl">            <span class="p">{</span>
+</span></span><span class="line"><span class="cl">              <span class="c1">//calculate average color for surrounding pixels
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>                <span class="n">float3</span> <span class="n">med</span> <span class="o">=</span> <span class="p">(</span><span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="mi">0</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)]</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">                              <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">+</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">0</span><span class="p">)]</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">                              <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="o">-</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span>
+</span></span><span class="line"><span class="cl">                              <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="mi">1</span><span class="p">)]</span> <span class="o">+</span> <span class="n">uavTextures</span><span class="p">[</span><span class="mi">0</span><span class="p">][</span><span class="n">launchIndex</span> <span class="o">+</span> <span class="n">uint2</span><span class="p">(</span><span class="mi">1</span><span class="p">,</span> <span class="o">-</span><span class="mi">1</span><span class="p">)])</span> <span class="o">/</span>
+</span></span><span class="line"><span class="cl">                             <span class="mi">9</span><span class="p">;</span>
+</span></span><span class="line"><span class="cl">                <span class="c1">//if the current pixel is brighter than the average, its color value is multiplied by the brightness of the surrounding pixels
+</span></span></span><span class="line"><span class="cl"><span class="c1"></span>                <span class="k">if</span> <span class="p">(</span><span class="n">dot</span><span class="p">(</span><span class="n">reflection</span><span class="p">,</span> <span class="n">reflection</span><span class="p">)</span> <span class="o">&gt;</span> <span class="n">dot</span><span class="p">(</span><span class="n">med</span><span class="p">,</span> <span class="n">med</span><span class="p">))</span> <span class="n">reflection</span> <span class="o">=</span> <span class="n">reflection</span> <span class="o">*</span> <span class="n">dot</span><span class="p">(</span><span class="n">med</span><span class="p">,</span> <span class="n">med</span><span class="p">);</span>
+</span></span><span class="line"><span class="cl">            <span class="p">}</span>
+</span></span></code></pre></div>
+<h2 class="relative group">Conclusions 
+    <div id="conclusions" class="anchor"></div>
+    
+    <span
+        class="absolute top-0 w-6 transition-opacity opacity-0 ltr:-left-6 rtl:-right-6 not-prose group-hover:opacity-100 select-none">
+        <a class="group-hover:text-primary-300 dark:group-hover:text-neutral-700 !no-underline" href="#conclusions" aria-label="Anchor">#</a>
+    </span>        
+    
+</h2>
+<iframe frameborder="0" class="juxtapose" width="100%" height="466" src="https://cdn.knightlab.com/libs/juxtapose/latest/embed/index.html?uid=bf787e24-bb0b-11ee-9ddd-3f41531135b6"></iframe>
+<p>The information presented here is minimal, but hopefully, it sparks interest in this field. This project proved to be a great source of knowledge for me, and I totally recommend giving it a try.</p>
+<p>Based on my experience, DX12 was a great API to use for this purpose. Admittedly, the learning stage was challenging. Yet, once mastered, DX12 proved to be an exceptionally powerful tool</p>
+<p>This project lays the groundwork for further exploration and the integration of more advanced features.</p>
+<p>For those seeking to dive deeper into this field, here are some of the resources I used:</p>
+<p><a
+  href="http://cwyman.org/code/dxrTutors/tutors/Tutor12/tutorial12.md.html"
+    target="_blank"
+  >This helped me implement PBR</a>: this is a series of tutorials on creating a DXR hybrid renderer</p>
+<p><a
+  href="https://developer.nvidia.com/rtx/raytracing/dxr/dx12-raytracing-tutorial-part-1"
+    target="_blank"
+  >Nvidia tutorial series for DXR</a>:Lays down the basics of using DXR</p>
+<p><a
+  href="https://developer.nvidia.com/books/raytracing/raytracing_gems_preview"
+    target="_blank"
+  >Ray Tracing gems</a>: A series of papers on ray tracing. Part VI talks about Hybrid approaches.</p>
+<p><a
+  href="https://microsoft.github.io/DirectX-Specs/d3d/Raytracing.html#intro"
+    target="_blank"
+  >Microsoft documentation for DXR</a>: Could prove useful if the nvidia helpers create issues or if you don&rsquo;t want to use them</p>
+<p>
+
+
+
+
+
+
+<figure>
+    <img class="my-0 rounded-md" loading="lazy" alt="buas logo" src="../hybridrtarticle/Logo_BUas.png">
+
+  
+</figure>
+</p>
+
+          
+          
+          
+        </div>
+        
+          
+  
+  
+  
+  
+  
+  
+
+  
+
+  
+    
+    
+<div class="flex author">
+  
+    
+    
+      
+    
+    
+      
+        
+      
+      <img
+        class="!mt-0 !mb-0 h-24 w-24 rounded-full ltr:mr-4 rtl:ml-4"
+        width="96"
+        height="96"
+        alt="DEPIS"
+        src="/101334730_5223969818893333686_hu_5ff0bf5485c87efe.jpg">
+    
+  
+  <div class="place-self-center">
+    
+      <div class="text-[0.6rem] uppercase leading-3 text-neutral-500 dark:text-neutral-400">
+        Author
+      </div>
+      <div class="font-semibold leading-6 text-neutral-800 dark:text-neutral-300">
+        DEPIS
+      </div>
+    
+    
+      <div class="text-sm text-neutral-700 dark:text-neutral-400">Professional Dumbass</div>
+    
+    <div class="text-2xl sm:text-lg">
+  <div class="flex flex-wrap text-neutral-400 dark:text-neutral-500">
+    
+      
+        <a
+          class="px-1 hover:text-primary-700 dark:hover:text-primary-400"
+          href="mailto:ddepis.d@gmail.com"
+          target="_blank"
+          aria-label="Email"
+          rel="me noopener noreferrer"
+          ><span class="inline-block align-text-bottom"><span class="relative block icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M207.8 20.73c-93.45 18.32-168.7 93.66-187 187.1c-27.64 140.9 68.65 266.2 199.1 285.1c19.01 2.888 36.17-12.26 36.17-31.49l.0001-.6631c0-15.74-11.44-28.88-26.84-31.24c-84.35-12.98-149.2-86.13-149.2-174.2c0-102.9 88.61-185.5 193.4-175.4c91.54 8.869 158.6 91.25 158.6 183.2l0 16.16c0 22.09-17.94 40.05-40 40.05s-40.01-17.96-40.01-40.05v-120.1c0-8.847-7.161-16.02-16.01-16.02l-31.98 .0036c-7.299 0-13.2 4.992-15.12 11.68c-24.85-12.15-54.24-16.38-86.06-5.106c-38.75 13.73-68.12 48.91-73.72 89.64c-9.483 69.01 43.81 128 110.9 128c26.44 0 50.43-9.544 69.59-24.88c24 31.3 65.23 48.69 109.4 37.49C465.2 369.3 496 324.1 495.1 277.2V256.3C495.1 107.1 361.2-9.332 207.8 20.73zM239.1 304.3c-26.47 0-48-21.56-48-48.05s21.53-48.05 48-48.05s48 21.56 48 48.05S266.5 304.3 239.1 304.3z"/></svg>
+</span></span></a
+        >
+      
+    
+      
+        <a
+          class="px-1 hover:text-primary-700 dark:hover:text-primary-400"
+          href="https://github.com/dDEPIS"
+          target="_blank"
+          aria-label="Github"
+          rel="me noopener noreferrer"
+          ><span class="inline-block align-text-bottom"><span class="relative block icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 496 512"><path fill="currentColor" d="M165.9 397.4c0 2-2.3 3.6-5.2 3.6-3.3.3-5.6-1.3-5.6-3.6 0-2 2.3-3.6 5.2-3.6 3-.3 5.6 1.3 5.6 3.6zm-31.1-4.5c-.7 2 1.3 4.3 4.3 4.9 2.6 1 5.6 0 6.2-2s-1.3-4.3-4.3-5.2c-2.6-.7-5.5.3-6.2 2.3zm44.2-1.7c-2.9.7-4.9 2.6-4.6 4.9.3 2 2.9 3.3 5.9 2.6 2.9-.7 4.9-2.6 4.6-4.6-.3-1.9-3-3.2-5.9-2.9zM244.8 8C106.1 8 0 113.3 0 252c0 110.9 69.8 205.8 169.5 239.2 12.8 2.3 17.3-5.6 17.3-12.1 0-6.2-.3-40.4-.3-61.4 0 0-70 15-84.7-29.8 0 0-11.4-29.1-27.8-36.6 0 0-22.9-15.7 1.6-15.4 0 0 24.9 2 38.6 25.8 21.9 38.6 58.6 27.5 72.9 20.9 2.3-16 8.8-27.1 16-33.7-55.9-6.2-112.3-14.3-112.3-110.5 0-27.5 7.6-41.3 23.6-58.9-2.6-6.5-11.1-33.3 2.6-67.9 20.9-6.5 69 27 69 27 20-5.6 41.5-8.5 62.8-8.5s42.8 2.9 62.8 8.5c0 0 48.1-33.6 69-27 13.7 34.7 5.2 61.4 2.6 67.9 16 17.7 25.8 31.5 25.8 58.9 0 96.5-58.9 104.2-114.8 110.5 9.2 7.9 17 22.9 17 46.4 0 33.7-.3 75.4-.3 83.6 0 6.5 4.6 14.4 17.3 12.1C428.2 457.8 496 362.9 496 252 496 113.3 383.5 8 244.8 8zM97.2 352.9c-1.3 1-1 3.3.7 5.2 1.6 1.6 3.9 2.3 5.2 1 1.3-1 1-3.3-.7-5.2-1.6-1.6-3.9-2.3-5.2-1zm-10.8-8.1c-.7 1.3.3 2.9 2.3 3.9 1.6 1 3.6.7 4.3-.7.7-1.3-.3-2.9-2.3-3.9-2-.6-3.6-.3-4.3.7zm32.4 35.6c-1.6 1.3-1 4.3 1.3 6.2 2.3 2.3 5.2 2.6 6.5 1 1.3-1.3.7-4.3-1.3-6.2-2.2-2.3-5.2-2.6-6.5-1zm-11.4-14.7c-1.6 1-1.6 3.6 0 5.9 1.6 2.3 4.3 3.3 5.6 2.3 1.6-1.3 1.6-3.9 0-6.2-1.4-2.3-4-3.3-5.6-2z"/></svg>
+</span></span></a
+        >
+      
+    
+      
+        <a
+          class="px-1 hover:text-primary-700 dark:hover:text-primary-400"
+          href="https://ko-fi.com/depis"
+          target="_blank"
+          aria-label="Ko-Fi"
+          rel="me noopener noreferrer"
+          ><span class="inline-block align-text-bottom"><span class="relative block icon"><?xml version="1.0" encoding="UTF-8"?>
+<!-- Created with Inkscape (http://www.inkscape.org/) -->
+<svg width="211.67mm" height="211.67mm" version="1.1" viewBox="0 0 211.67 211.67" xmlns="http://www.w3.org/2000/svg">
+ <defs>
+  <clipPath id="clipPath25">
+   <path d="m0 600h1654.8v-600h-1654.8z" fill="currentColor"/>
+  </clipPath>
+ </defs>
+ <g transform="translate(-3.0786 -29.59)">
+  <g transform="matrix(.35278 0 0 -.35278 3.0785 241.26)">
+   <g clip-path="url(#clipPath25)">
+    <g transform="translate(600 300)">
+     <path d="m-300 300c-165.69 0-300-134.31-300-300 0-165.69 134.31-300 300-300 165.68 0 300 134.31 300 300 0 165.69-134.32 300-300 300zm-188.93-166.99h329.58c23.223 0 46.032-6.8325 65.073-20.125 18.412-12.856 36.378-33.646 42.697-67.02 14.674-77.514-43.568-135.76-126.12-131.18 0.438-21.268-3.8105-59.422-44.878-69.696-3.282-0.821-6.6604-1.186-10.044-1.207-72.13-0.448-222.53-0.88916-222.53-0.88916s-46.066-0.01555-49.176 45.962c-1.023 77.88-0.48339 223.69-0.48339 223.69s-0.02651 2.9267-0.02051 3.6577c0.043 5.607 4.4359 16.8 15.901 16.8zm312.71-55.573v-107.8s14.302-1.6507 31.907 0.54932c20.356 6.6 39.06 20.901 39.06 57.199 0 14.85-5.2614 25.601-11.837 33.239-9.341 10.848-23.152 16.809-37.469 16.809h-21.661z" fill="currentColor"/>
+    </g>
+    <g transform="translate(256.61 203.37)">
+     <path d="m0 0c3.585-1.806 5.876 0.437 5.876 0.437s52.457 47.878 76.089 75.452c21.018 24.667 22.389 66.234-13.708 81.766-36.096 15.532-65.795-18.272-65.795-18.272-25.755 28.326-64.734 26.891-82.763 7.721-18.027-19.169-11.732-52.072 1.717-70.383 12.626-17.19 68.119-66.65 76.529-75.015 0 0 0.614-0.641 2.055-1.706" fill="currentColor"/>
+    </g>
+   </g>
+  </g>
+ </g>
+</svg>
+</span></span></a
+        >
+      
+    
+  </div>
+
+</div>
+  </div>
+</div>
+
+  
+
+  
+
+  
+    <div class="mb-10"></div>
+  
+
+        
+        
+
+        
+
+        
+  
+  
+    <h2 class="mt-8 text-2xl font-extrabold mb-10">Related</h2>
+    <section class="w-full grid gap-4 sm:grid-cols-2 md:grid-cols-3">
+      
+        
+<div
+  class="group-hover-card group relative min-h-full min-w-full overflow-hidden rounded border border-2 border-neutral-200 shadow-2xl dark:border-neutral-700">
+  <a
+    
+  href="/projects/hybridraytracer/"
+    class="absolute inset-0"
+    aria-label="DXR Hybrid Ray tracer"></a>
+        
+          <div
+            class="thumbnail_card_related nozoom w-full"
+            style="background-image:url(/projects/hybridraytracer/cover_hu_8d418a47421f1e4e.png);"></div>
+        
+      
+  <div class="px-6 py-4">
+    
+      <div
+        class="group-hover-card-title decoration-primary-500 dark:text-neutral text-xl font-bold text-neutral-800 group-hover:underline group-hover:underline-offset-2">
+        DXR Hybrid Ray tracer
+      </div>
+    
+    <div class="group-hover-cancel text-sm text-neutral-500 dark:text-neutral-400">
+      
+
+
+
+
+
+
+
+  
+
+  
+  
+  
+
+  
+  
+    
+  
+
+  
+    
+  
+
+  
+
+  
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+
+  <div class="flex flex-row flex-wrap items-center">
+    
+    
+      <time datetime="2023-12-04T00:00:00&#43;00:00">4 December 2023</time><span class="px-2 text-primary-500">&middot;</span><span>127 words</span>
+    
+
+    
+    
+  </div>
+
+  
+
+  
+  
+
+  
+  
+
+
+
+    </div>
+    
+      <div class="prose dark:prose-invert py-1">A hybrid ray tracer built with DXR</div>
+    
+  </div>
+  <div class="px-6 pt-4 pb-2"></div>
+</div>
+
+      
+        
+<div
+  class="group-hover-card group relative min-h-full min-w-full overflow-hidden rounded border border-2 border-neutral-200 shadow-2xl dark:border-neutral-700">
+  <a
+    
+  href="/projects/2draytracer/"
+    class="absolute inset-0"
+    aria-label="2D Ray Tracer"></a>
+        
+          <div
+            class="thumbnail_card_related nozoom w-full"
+            style="background-image:url(/projects/2draytracer/cover_hu_a6f432f850e49bf9.png);"></div>
+        
+      
+  <div class="px-6 py-4">
+    
+      <div
+        class="group-hover-card-title decoration-primary-500 dark:text-neutral text-xl font-bold text-neutral-800 group-hover:underline group-hover:underline-offset-2">
+        2D Ray Tracer
+      </div>
+    
+    <div class="group-hover-cancel text-sm text-neutral-500 dark:text-neutral-400">
+      
+
+
+
+
+
+
+
+  
+
+  
+  
+  
+
+  
+  
+    
+  
+
+  
+    
+  
+
+  
+
+  
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+
+  <div class="flex flex-row flex-wrap items-center">
+    
+    
+      <time datetime="2023-09-04T00:00:00&#43;00:00">4 September 2023</time><span class="px-2 text-primary-500">&middot;</span><span>129 words</span>
+    
+
+    
+    
+  </div>
+
+  
+
+  
+  
+
+  
+  
+
+
+
+    </div>
+    
+      <div class="prose dark:prose-invert py-1">2D Ray-Tracing renderer</div>
+    
+  </div>
+  <div class="px-6 pt-4 pb-2"></div>
+</div>
+
+      
+        
+<div
+  class="group-hover-card group relative min-h-full min-w-full overflow-hidden rounded border border-2 border-neutral-200 shadow-2xl dark:border-neutral-700">
+  <a
+    
+  href="/projects/galacticgoo/"
+    class="absolute inset-0"
+    aria-label="Galactic Goo "></a>
+        
+          <div
+            class="thumbnail_card_related nozoom w-full"
+            style="background-image:url(/projects/galacticgoo/cover_hu_4e495c2a9f960905.png);"></div>
+        
+      
+  <div class="px-6 py-4">
+    
+      <div
+        class="group-hover-card-title decoration-primary-500 dark:text-neutral text-xl font-bold text-neutral-800 group-hover:underline group-hover:underline-offset-2">
+        Galactic Goo 
+      </div>
+    
+    <div class="group-hover-cancel text-sm text-neutral-500 dark:text-neutral-400">
+      
+
+
+
+
+
+
+
+  
+
+  
+  
+  
+
+  
+  
+    
+  
+
+  
+    
+  
+
+  
+
+  
+    
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+  
+
+
+  <div class="flex flex-row flex-wrap items-center">
+    
+    
+      <time datetime="2023-09-04T00:00:00&#43;00:00">4 September 2023</time><span class="px-2 text-primary-500">&middot;</span><span>88 words</span>
+    
+
+    
+    
+  </div>
+
+  
+
+  
+  
+
+  
+  
+
+
+
+    </div>
+    
+      <div class="prose dark:prose-invert py-1">Puzzle-platform game made with UE5</div>
+    
+  </div>
+  <div class="px-6 pt-4 pb-2"></div>
+</div>
+
+      
+    </section>
+  
+
+
+      </div>
+
+      
+      
+        
+        
+          
+          
+        
+        
+        
+        <script
+          type="text/javascript"
+          src="/js/page.min.54b6f4371722649edbe871e431d8670d670878c22be8f36e229fe53cc9b786fe25a834def5e6de621f7a3e37b72bc8cd73839aa5ed907ed6cbd45cd3e1b0fa20.js"
+          integrity="sha512-VLb0NxciZJ7b6HHkMdhnDWcIeMIr6PNuIp/lPMm3hv4lqDTe9ebeYh96Pje3K8jNc4Oape2QftbL1FzT4bD6IA=="
+          data-oid="views_Articles\HybridRTArticle\index.md"
+          data-oid-likes="likes_Articles\HybridRTArticle\index.md"></script>
+      
+    </section>
+
+    
+    <footer class="pt-8 max-w-prose print:hidden">
+      
+  
+    
+    
+    
+    <div class="pt-8">
+      <hr class="border-dotted border-neutral-300 dark:border-neutral-600">
+      <div class="flex justify-between pt-3">
+        <span>
+          
+        </span>
+        <span>
+          
+            <a class="flex text-right group ml-3" href="/articles/uecolortoolsarticle/">
+              <span class="flex flex-col">
+                <span class="mt-[0.1rem] leading-6 group-hover:underline group-hover:decoration-primary-500"
+                  >UE Color Tools </span
+                >
+                <span class="mt-[0.1rem] text-xs text-neutral-500 dark:text-neutral-400">
+                  
+                    <time datetime="2026-02-25T00:00:00&#43;00:00">25 February 2026</time>
+                  
+                </span>
+              </span>
+              <span
+                class="ml-3 text-neutral-700 group-hover:text-primary-600 ltr:inline rtl:hidden dark:text-neutral dark:group-hover:text-primary-400"
+                >&rarr;</span
+              >
+              <span
+                class="mr-3 text-neutral-700 group-hover:text-primary-600 ltr:hidden rtl:inline dark:text-neutral dark:group-hover:text-primary-400"
+                >&larr;</span
+              >
+            </a>
+          
+        </span>
+      </div>
+    </div>
+  
+
+
+      
+    </footer>
+  </article>
+
+        <div id="top-scroller" class="pointer-events-none absolute top-[110vh] bottom-0 w-12 ltr:right-0 rtl:left-0 z-10">
+  <a
+    href="#the-top"
+    class="pointer-events-auto sticky top-[calc(100vh-5.5rem)] flex h-12 w-12 mb-16 items-center justify-center rounded-full bg-neutral/50 text-xl text-neutral-700 hover:text-primary-600 dark:bg-neutral-800/50 dark:text-neutral dark:hover:text-primary-400"
+    aria-label="Scroll to top"
+    title="Scroll to top">
+    &uarr;
+  </a>
+</div>
+
+      </main><footer id="site-footer" class="py-10 print:hidden">
+  
+  
+    
+  
+  <div class="flex items-center justify-between">
+    
+    
+      <p class="text-sm text-neutral-500 dark:text-neutral-400">
+          &copy;
+          2026
+          DEPIS
+      </p>
+    
+
+    
+    
+      <p class="text-xs text-neutral-500 dark:text-neutral-400">
+        
+        
+        Powered by <a class="hover:underline hover:decoration-primary-400 hover:text-primary-500"
+          href="https://gohugo.io/" target="_blank" rel="noopener noreferrer">Hugo</a> &amp; <a class="hover:underline hover:decoration-primary-400 hover:text-primary-500"
+          href="https://blowfish.page/" target="_blank" rel="noopener noreferrer">Blowfish</a>
+      </p>
+    
+  </div>
+  
+    <script>
+      mediumZoom(document.querySelectorAll("img:not(.nozoom)"), {
+        margin: 24,
+        background: "rgba(0,0,0,0.5)",
+        scrollOffset: 0,
+      });
+    </script>
+  
+  
+  
+  <script
+    type="text/javascript"
+    src="/js/process.min.ee03488f19c93c2efb199e2e3014ea5f3cb2ce7d45154adb3399a158cac27ca52831db249ede5bb602700ef87eb02434139de0858af1818ab0fb4182472204a4.js"
+    integrity="sha512-7gNIjxnJPC77GZ4uMBTqXzyyzn1FFUrbM5mhWMrCfKUoMdsknt5btgJwDvh&#43;sCQ0E53ghYrxgYqw&#43;0GCRyIEpA=="></script>
+  
+  
+    <script type="module">
+  async function initWebGPU() {
+    
+    
+    
+  const allowedPaths = [
+        "/",         
+        "/about/",   
+        "/projects/",
+        "/articles/"    
+    ];
+
+    
+    
+    const shouldRun = allowedPaths.includes(window.location.pathname);
+
+    if (!shouldRun) return;
+    if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
+
+    
+    document.body.style.backgroundColor = "transparent";
+    const canvas = document.createElement("canvas");
+    canvas.id = "webgpu-bg";
+    document.body.prepend(canvas);
+    Object.assign(canvas.style, {
+      position: "fixed", top: "0", left: "0",
+      width: "100vw", height: "100vh",
+      zIndex: "-1", pointerEvents: "none" 
+    });
+
+    
+    const adapter = await navigator.gpu.requestAdapter();
+    const device = await adapter.requestDevice();
+    const context = canvas.getContext("webgpu");
+
+    
+    
+    
+    
+    
+        const shaderCode = `struct Uniforms \u007b\r\n  resolution: vec2f,\r\n  time: f32,\r\n  color_t: f32, \/\/ Replaces padding: 0.0 = Red, 1.0 = White\r\n  yaw: f32, \r\n  pitch: f32,\r\n  padding2: vec2f \/\/ Keeps the buffer aligned to 32 bytes\r\n\u007d\r\n\r\n@group(0) @binding(0) var\u003cuniform\u003e uniforms: Uniforms;\r\n\r\n\/\/ Constants for materials\r\nconst MAT_GROUND = 0.0;\r\nconst MAT_STEM = 1.0;\r\nconst MAT_ROSE = 2.0;\r\nconst MAT_DIRT = 3.0;\r\nconst MAT_DISSOLVE = 4.0;\r\nconst MAT_THORNS = 5.0;\r\n\r\n\/\/ Define our two extreme colors\r\nconst COLOR_RED = vec3f(0.15, 0.02, 0.05);\r\nconst COLOR_WHITE = vec3f(0.8, 0.75, 0.7)*0.5;\r\n\r\n\r\n@vertex\r\nfn vs_main(@builtin(vertex_index) in_vertex_index: u32) -\u003e @builtin(position) vec4f \u007b\r\n  var pos = array\u003cvec2f, 3\u003e(\r\n    vec2f(-1.0, -1.0),\r\n    vec2f(3.0, -1.0),\r\n    vec2f(-1.0, 3.0)\r\n  );\r\n  return vec4f(pos[in_vertex_index], 0.0, 1.0);\r\n\u007d\r\n\r\nfn hash12(p: vec2f) -\u003e f32 \u007b\r\n    var p3  = fract(vec3f(p.xyx) * .1031);\r\n    p3 \u002b= dot(p3, p3.yzx \u002b 33.33);\r\n    return fract((p3.x \u002b p3.y) * p3.z);\r\n\u007d\r\nfn bayer4x4(p: vec2f) -\u003e f32 \u007b\r\n    let x = u32(p.x) % 4;\r\n    let y = u32(p.y) % 4;\r\n    let index = x \u002b y * 4;\r\n    \r\n    \r\n    var m = array\u003cf32, 16\u003e(\r\n         0.0, 12.0,  3.0, 15.0,\r\n         8.0,  4.0, 11.0,  7.0,\r\n         2.0, 14.0,  1.0, 13.0,\r\n        10.0,  6.0,  9.0,  5.0\r\n    );\r\n    \r\n  \r\n    return m[index] * 0.0625; \r\n\u007d\r\n\r\n\/\/ --- SDF Primitive Helpers ---\r\nfn opRotateY(p: vec3f, angle: f32) -\u003e vec3f \u007b\r\n    let c = cos(angle);\r\n    let s = sin(angle);\r\n    return vec3f(c * p.x - s * p.z, p.y, s * p.x \u002b c * p.z);\r\n\u007d\r\n\r\n\/\/ Rotates around the X axis (Pitch - tilting forward\/back)\r\nfn opRotateX(p: vec3f, angle: f32) -\u003e vec3f \u007b\r\n    let c = cos(angle);\r\n    let s = sin(angle);\r\n    return vec3f(p.x, c * p.y - s * p.z, s * p.y \u002b c * p.z);\r\n\u007d\r\n\r\n\r\n\r\nfn opRotateZ(p: vec3f, angle: f32) -\u003e vec3f \u007b\r\n    let s = sin(angle);\r\n    let c = cos(angle);\r\n    return vec3f(c * p.x - s * p.y, s * p.x \u002b c * p.y, p.z);\r\n\u007d\r\n\r\nfn sdCone(p: vec3f, c: vec2f, h: f32) -\u003e f32 \u007b\r\n    let q = length(p.xz);\r\n    return max(dot(c, vec2f(q, p.y)), -h - p.y);\r\n\u007d\r\n\r\nfn sdSphere(p: vec3f, s: f32) -\u003e f32 \u007b\r\n  return length(p) - s;\r\n\u007d\r\n\r\nfn sdCappedCylinder(p: vec3f, h: f32, r: f32) -\u003e f32 \u007b\r\n  let d = abs(vec2f(length(p.xz),p.y)) - vec2f(r,h);\r\n  \/\/ FIXED: max(d, vec2f(0.0)) instead of max(d, 0.0)\r\n  return min(max(d.x,d.y),0.0) \u002b length(max(d, vec2f(0.0)));\r\n\u007d\r\n\r\nfn sdEllipsoid(p: vec3f, r: vec3f) -\u003e f32 \u007b\r\n    let k0 = length(p\/r);\r\n    let k1 = length(p\/(r*r));\r\n    return k0*(k0-1.0)\/k1;\r\n\u007d\r\n\r\n\/\/ --- SDF Combination Helpers ---\r\n\r\nfn smin(a: f32, b: f32, k: f32) -\u003e f32 \u007b\r\n    let h = clamp(0.5 \u002b 0.5 * (b - a) \/ k, 0.0, 1.0);\r\n    return mix(b, a, h) - k * h * (1.0 - h);\r\n\u007d\r\n\r\n\r\n\r\nfn sdVerticalVesicaSegment(p: vec3f, h_in: f32, w_in: f32) -\u003e f32 \u007b\r\n    \/\/ 1. Create mutable local copies of the inputs\r\n    var h = h_in * 0.5;\r\n    var w = w_in * 0.5;\r\n\r\n    \/\/ 2. Shape constants\r\n    let d = 0.5 * (h * h - w * w) \/ w;\r\n    \r\n    \/\/ 3. Project to 2D\r\n    let q = vec2f(length(p.xz), abs(p.y - h));\r\n    \r\n    \/\/ 4. Feature selection\r\n    \/\/ GLSL: (condition) ? true : false\r\n    \/\/ WGSL: select(false, true, condition) \u003c-- IMPORTANT!\r\n    let condition = (h * q.x \u003c d * (q.y - h));\r\n    \r\n    let t = select(\r\n        vec3f(-d, 0.0, d \u002b w), \/\/ The \u0022False\u0022 case\r\n        vec3f(0.0, h, 0.0),    \/\/ The \u0022True\u0022 case\r\n        condition\r\n    );\r\n    \r\n    \/\/ 5. Distance\r\n    return length(q - t.xy) - t.z;\r\n\u007d\r\n\r\n\r\n\r\n\r\nfn dot2(v: vec3f) -\u003e f32 \u007b\r\n    return dot(v, v);\r\n\u007d\r\n\r\nfn udTriangle(p: vec3f, a: vec3f, b: vec3f, c: vec3f) -\u003e f32 \u007b\r\n    let ba = b - a; \r\n    let pa = p - a;\r\n    let cb = c - b; \r\n    let pb = p - b;\r\n    let ac = a - c; \r\n    let pc = p - c;\r\n    \r\n    let nor = cross(ba, ac);\r\n\r\n    \/\/ Calculate the 3 Barycentric\/projection conditions\r\n    let cond_val = sign(dot(cross(ba, nor), pa)) \u002b\r\n                   sign(dot(cross(cb, nor), pb)) \u002b\r\n                   sign(dot(cross(ac, nor), pc));\r\n\r\n    \/\/ EDGE DISTANCE MATH\r\n    \/\/ Calculates distance to the 3 distinct line segments\r\n    let d_edge_a = dot2(ba * clamp(dot(ba, pa) \/ dot2(ba), 0.0, 1.0) - pa);\r\n    let d_edge_b = dot2(cb * clamp(dot(cb, pb) \/ dot2(cb), 0.0, 1.0) - pb);\r\n    let d_edge_c = dot2(ac * clamp(dot(ac, pc) \/ dot2(ac), 0.0, 1.0) - pc);\r\n    \r\n    let dist_edge = min(min(d_edge_a, d_edge_b), d_edge_c);\r\n\r\n    \/\/ FACE DISTANCE MATH\r\n    \/\/ Calculates distance to the plane\r\n    let dist_face = dot(nor, pa) * dot(nor, pa) \/ dot2(nor);\r\n\r\n    \/\/ SELECT\r\n    \/\/ If cond_val \u003c 2.0, we are \u0022outside\u0022 the projection, use edge distance.\r\n    \/\/ Otherwise, use face distance.\r\n    let result_sq = select(\r\n        dist_face,   \/\/ False case (cond \u003e= 2.0) -\u003e Face\r\n        dist_edge,   \/\/ True case  (cond \u003c 2.0)  -\u003e Edge\r\n        cond_val \u003c 2.0\r\n    );\r\n\r\n    return sqrt(result_sq);\r\n\u007d\r\n\r\nfn opPolarRep(p: vec3f, repetitions: f32, offset_radius: f32) -\u003e vec3f \u007b\r\n    let PI = 3.14159265;\r\n    \r\n    let angle_step = 2.0 * PI \/ repetitions;\r\n\r\n    let current_angle = atan2(p.z, p.x);\r\n    let dist = length(p.xz);\r\n\r\n  \r\n    let sector = round(current_angle \/ angle_step);\r\n\r\n \r\n    let new_angle = current_angle - sector * angle_step;\r\n\r\n   \r\n    let q_xz = vec2f(\r\n        cos(new_angle) * dist,\r\n        sin(new_angle) * dist\r\n    );\r\n    \r\n   \r\n    return vec3f(q_xz.x - offset_radius, p.y, q_xz.y);\r\n\u007d\r\nfn sdVesica(p: vec2f, r: f32, d: f32) -\u003e f32 \u007b\r\n    let p_abs = abs(p);\r\n    let b = sqrt(r * r - d * d);\r\n    \r\n    let condition = (p_abs.y - b) * d \u003e p_abs.x * b;\r\n    \r\n    let d1 = length(p_abs - vec2f(0.0, b));\r\n    let d2 = length(p_abs - vec2f(-d, 0.0)) - r;\r\n    \r\n    return select(d2, d1, condition);\r\n\u007d\r\nfn smax(a: f32, b: f32, k: f32) -\u003e f32 \u007b\r\n    let h = clamp(0.5 \u002b 0.5 * (a - b) \/ k, 0.0, 1.0);\r\n    return mix(a, b, h) \u002b k * h * (1.0 - h);\r\n\u007d\r\n\r\n\r\n\r\n\r\nfn sdPetal(p: vec3f, s: f32) -\u003e f32 \u007b\r\n    var pos = p;\r\n\r\n    \/\/ Normalize \u0027s\u0027 for blending\r\n    \/\/ s is now between 0.2 and 0.35\r\n    let t = smoothstep(0.2, 0.35, s);\r\n\r\n    let width_factor = mix(0.3, 1.0, t);\r\n\r\n    \/\/ --- BENDING ---\r\n    \r\n    \/\/SIDE CUPPING (Spoon shape)\r\n    \/\/ Stronger on inside (2.0), weaker on outside (1.0)\r\n    let cup_strength = mix(1.9, 0.05, t);\r\n    let cup_strength_y = mix(0.2, 0.5, t);\r\n    pos.z \u002b= pos.x * pos.x * cup_strength;\r\n    pos.z \u002b= pos.y * pos.y * cup_strength_y;\r\n\r\n   \/\/ pos.x \/= pos.z*0.5; \r\n  \r\n  \/\/  pos.y \/= pos.z*0.5;\r\n\r\n    let curl_factor = mix(0.9, 3.2, t);\r\n\r\n  let tip_height = max(pos.y - 0.3, 0.0);\r\n    let tip_side = max(abs(pos.x)\/curl_factor - 0.1, 0.0);\r\n    \/\/ We calculate a curve strength based on height\r\n    \/\/ We use a square curve (pow 2.0) for a smooth bend\r\n    let curl_amount = pow(tip_height, 2.0) * 2.0 * t \u002b  pow(tip_side, 2.0)*0.8; \/\/ Active mainly on outer petals\r\n    \r\n    \/\/ Curl BACK (Negative Z)\r\n    pos.z -= curl_amount;\r\n    \r\n\r\n\r\nlet bulge_domain = vec2f(pos.x, pos.y * 0.7); \r\n    let dist_sq = dot(bulge_domain, bulge_domain);\r\n    \r\n    \r\n    let gaussian = exp(-4.0 * dist_sq);\r\n    \r\n    \/\/  Apply bulge\r\n \r\n    let bulge_strength = 0.25; \r\n    \r\n    \/\/ Subtract from Z to push it \u0022Out\u0022 \r\n    pos.z -= gaussian * bulge_strength;\r\n  \r\n  \/\/  let z_taper_strength = 0.8; \r\n   \/\/ let z_scale = clamp(1.0 \u002b pos.z * z_taper_strength, 0.1, 2.0);\r\n\r\n\r\n\r\n    \/\/ --- SHAPE ---\r\n    let taper_strength = mix(0.3, 0.5, t);\r\n    let taper = 1.0 \u002b taper_strength * pos.y;\r\n    \r\n\r\nlet pointiness = 1\u002b max(pos.y - 0.6, 0.0) * 2;\r\n\r\n    \/\/ Clamp taper to be safe\r\n    let p_x =(pos.x) \/ (clamp(taper, 0.1, 2.0)* width_factor);\/\/ \r\n    \r\n    \/\/ Base Circle\r\n    let d_2d = length(vec2f(p_x, pos.y)) - 0.8; \r\n\r\n    \/\/ Cut Top\r\n    let d_flat_top = smax(d_2d, pos.y - 0.35, 0.05);\r\n\r\n    \/\/ Thickness\r\n    \/\/ Scale distance by 0.6 to avoid artifacts\r\n    let d_final_2d = d_flat_top * 0.6; \r\n\r\n    let thickness = 0.01; \r\n    let d_z = abs(pos.z) - thickness;\r\n\r\n    let w = vec2f(d_2d, d_z);\r\n    return min(max(w.x, w.y), 0.0) \u002b length(max(w, vec2f(0.0)));\r\n\r\n\r\n \r\n\u007d\r\n\r\n\r\n\r\n\r\n\r\nfn sdFallingPetals(p: vec3f, time: f32) -\u003e vec2f \u007b\r\n    let spacing = 2.0; \r\n    let cell = floor(p.xz \/ spacing);\r\n    let local_p = fract(p.xz \/ spacing) - 0.5;\r\n    let sign_p = sign(local_p);\r\n    \r\n    var d_min: f32 = 100.0;\r\n    var final_mat: f32 = MAT_ROSE; \r\n    \r\n    for (var i: f32 = 0.0; i \u003c= 1.0; i \u002b= 1.0) \u007b\r\n        for (var j: f32 = 0.0; j \u003c= 1.0; j \u002b= 1.0) \u007b\r\n            let neighbor_offset = vec2f(i, j) * sign_p;\r\n            let current_cell = cell \u002b neighbor_offset;\r\n            \r\n            let seed = hash12(current_cell);\r\n            let seed2 = hash12(current_cell \u002b vec2f(13.3, 41.5));\r\n            \r\n            let speed = 0.45 \u002b seed * 0.25; \r\n            let start_h = 5.0 \u002b seed2 * 1.0;\r\n            let cycle_duration = 19.0;\/\/ \u002b seed * 3.0; \r\n            \r\n            let local_time = (time \u002b seed * 70.0) % cycle_duration;\r\n            \r\n            \/\/ \u0022Virtual\u0022 drop Y is where it WOULD be if it never slowed down\r\n            let virtual_drop_y = start_h - (local_time * speed);\r\n            let ground_y = -0.5;\/\/ \u002b seed * 0.06;\r\n            let ground_dist = virtual_drop_y - ground_y;\r\n            \r\n            \/\/ --- 1. DISSOLVE EARLIER ---\r\n            \r\n            var dissolve_progress = smoothstep(0.9,0.5, ground_dist);\r\n            \r\n            if (dissolve_progress \u003e 0.99) \u007b continue; \u007d\r\n            \r\n            let size = 0.09 \u002b seed * 0.06;\r\n            \r\n            \/\/ --- 2. THE SOFT LANDING ---\r\n            var actual_y: f32 = virtual_drop_y;\r\n            let landing_zone = 0.5; \/\/ Starts slowing down 0.5 units above ground\r\n            \r\n            \/\/ if (ground_dist \u003c landing_zone \u0026\u0026 ground_dist \u003e 0.0) \u007b\r\n            \/\/     \/\/ Map the distance to a 0.0 - 1.0 range, then apply a quadratic curve (t * t)\r\n            \/\/     \/\/ This naturally decelerates the fall and easing it perfectly into ground_y\r\n            \/\/     let t = ground_dist \/ landing_zone; \r\n            \/\/     actual_y = ground_y \u002b landing_zone * (t * t);\r\n            \/\/ \u007d else if (ground_dist \u003c= 0.0) \u007b\r\n            \/\/     actual_y = ground_y;\r\n            \/\/ \u007d\r\n            \r\n            let cell_center_xz = (current_cell \u002b 0.5) * spacing;\r\n            var q = vec3f(p.x - cell_center_xz.x, p.y - actual_y, p.z - cell_center_xz.y);\r\n            \r\n            let wind_damp = smoothstep(-0.1, 0.5, ground_dist);\r\n            q.x \u002b= sin(time * 1.5 \u002b seed * 10.0) * 0.25 * wind_damp;\r\n            q.z \u002b= cos(time * 1.2 \u002b seed2 * 10.0) * 0.25 * wind_damp;\r\n            \r\n            \/\/ Because \u0027actual_y\u0027 curves smoothly, the rotation naturally decelerates with it!\r\n            let fall_progress = start_h - actual_y;\r\n            q = opRotateX(q, fall_progress * (2.5 \u002b seed) \u002b seed * 10.0);\r\n            q = opRotateY(q, fall_progress * 1.5 \u002b seed * 20.0);\r\n            q = opRotateZ(q, fall_progress * 1.0 \u002b seed * 5.0);\r\n            \r\n            let d_base = sdPetal(q \/ size, 0.32) * size;\r\n            \r\n            let noise = ( sin(q.x * 80.0) * sin(q.y * 50.0) * sin(q.z * 70.0))* 0.5 \u002b 0.5;\r\n\r\n           \/\/ dissolve_progress = 0.025;\r\n          let carve_amount = (dissolve_progress * 0.0015) \u002b (noise * dissolve_progress * 0.001);\r\n            let d = d_base \u002b carve_amount;\r\n            \r\n            if (d \u003c d_min) \r\n            \u007b\r\n                d_min = d;\r\n                \r\n                if (dissolve_progress \u003e 0.0)\r\n                 \u007b\r\n                    let glow_intensity = smoothstep(0.4, 1.0, noise) * sin(dissolve_progress * 3.1415);\r\n                    final_mat = MAT_DISSOLVE \u002b clamp(glow_intensity, 0.0, 0.99);\r\n                \u007d else \u007b\r\n                    \/\/ Calculate gradient for falling petal based on its local coordinate \u0027q\u0027\r\n                    let dist_from_root = max(length(q \u002b vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);\r\n                    let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);\r\n                    final_mat = MAT_ROSE \u002b gradient;\r\n                \u007d\r\n            \u007d\r\n        \u007d\r\n    \u007d\r\n    return vec2f(d_min, final_mat);\r\n\u007d\r\n\r\nfn sdRose(p: vec3f) -\u003e vec2f \u007b\r\n    let d_sphere = length(p - vec3f(0.0, 0.1, 0.0)) - 0.3;\r\n\r\n    if (d_sphere \u003e 0.05) \u007b\r\n        \/\/ Safe early exit, returning a dummy material\r\n        return vec2f(d_sphere, MAT_ROSE);\r\n    \u007d\r\n\r\n    var d_min = 100.0;\r\n    let petal_count = 15.0; \r\n    let golden_angle = 2.39996; \r\n    let time = uniforms.time * 2.0;\r\n    \r\n    \/\/ Explicit f32 for the loop to prevent WGSL type errors\r\n    for (var i: f32 = 1.0; i \u003c 15.0; i \u002b= 1.0) \u007b \r\n        let r = (0.01) * sqrt(i); \r\n        let theta = i * golden_angle;\r\n         \r\n        let petal_center = vec3f(r * cos(theta), -r * 0.2, r * sin(theta));\r\n        let scale = 0.1 \u002b (i \/ petal_count) * 0.25;\r\n\r\n        var q = p - petal_center;\r\n        q = opRotateY(q, -theta \u002b 1.57);\r\n      \r\n        let tilt = -0.3 \u002b (i \/ petal_count)* (0.9 \u002b sin(time) * 0.15); \r\n        q = opRotateX(q, -tilt);\r\n        q = q \/ 0.2;\r\n\r\n        let pivot_offset = vec3f(0.0, 0.7, 0.0);\r\n        let d = sdPetal(q - pivot_offset, scale) * scale;\r\n        \r\n        d_min = min(d_min, d);\r\n    \u007d\r\n    \r\n    \/\/ The closer the local point \u0027p\u0027 is to 0,0,0, the closer it is to the root.\r\n    \/\/ Map this distance to a 0.0 - 0.99 gradient.\r\n    let dist_from_center = max(length(p \u002b vec3f(0.0, 0.1, 0.0)) - 0.05, 0.0);\r\n    let gradient = clamp(dist_from_center * 3.5, 0.0, 0.99);\r\n    \r\n    return vec2f(d_min, MAT_ROSE \u002b gradient);\r\n\u007d\r\n\r\n\r\nfn sdLeaf(p: vec3f) -\u003e f32 \u007b\r\n    \/\/ 1. THE PETIOLE (Leaf Stem)\r\n    let petiole_length = 0.12;\r\n    let p_start = vec3f(0.0, 0.0, 0.0);\r\n    let p_end = vec3f(petiole_length, 0.03, 0.0); \r\n    \r\n    let pa = p - p_start;\r\n    let ba = p_end - p_start;\r\n    let h = clamp(dot(pa, ba) \/ dot(ba, ba), 0.0, 1.0);\r\n    let d_petiole = length(pa - ba * h) - 0.008; \r\n\r\n    \/\/ 2. THE LEAF BLADE\r\n    var q = p - p_end; \r\n    \r\n    q.y \u002b= q.x * q.x * 0.5;   \/\/ Gravity bend\r\n    q.y -= abs(q.z) * 0.2;    \/\/ V-shape fold\r\n    \r\n    let blade_len = 0.25;\r\n    q.x -= blade_len; \r\n    \r\n    let normalized_x = (q.x \u002b blade_len) \/ (blade_len * 2.0);\r\n    let leaf_width = 0.15 * sin(normalized_x * 3.14159);\r\n    \r\n    \/\/ --- THE CHEAP VEINS ---\r\n    \/\/ A high-frequency cosine wave generating V-shaped diagonal ridges\r\n    let vein_pattern = cos(q.x * 120.0 - abs(q.z) * 80.0) * 0.5 \u002b 0.5;\r\n    \r\n    \/\/ Fade the veins out near the very edge and base so they don\u0027t look jagged\r\n    let vein_mask = smoothstep(0.0, 0.02, abs(q.z)) * (1.0 - normalized_x * 0.5);\r\n    \r\n    \/\/ Displace the physical surface by 1.5 millimeters\r\n    q.y \u002b= vein_pattern * vein_mask * 0.0015;\r\n    \/\/ -----------------------\r\n    \r\n    let scale = vec3f(blade_len, 0.005, max(leaf_width, 0.01));\r\n    \r\n    let k0 = length(q \/ scale);\r\n    let k1 = length(q \/ (scale * scale));\r\n    let d_blade = k0 * (k0 - 1.0) \/ k1;\r\n    \r\n    return smin(d_petiole, d_blade, 0.015) * 0.75;\r\n\u007d\r\n\r\nfn sdStem(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -\u003e f32 \u007b\r\n    let pa = p - a;\r\n    let ba = b - a;\r\n    \r\n    \/\/ Find progress along the stem (0.0 = bottom, 1.0 = top)\r\n    let h = clamp( dot(pa, ba) \/ dot(ba, ba), 0.0, 1.0 );\r\n    \r\n    \/\/ S-CURVE\r\n    \r\n    let wiggle = sin(h * 10.28318)*0.5;\r\n    \r\n    \/\/THE STRAIGHTENER\r\n   \r\n    let straightness_mask = pow((1.0 - h), 0.8); \r\n    \r\n \r\n    \/\/ We assume the bend is along X and Z to give it volume\r\n    let offset_dir = vec3f(bend, 0.0, bend * 0.2);\r\n    let current_offset = offset_dir * wiggle * straightness_mask;\r\n    \r\n    \/\/Position on the curve\r\n    let pos_on_line = a \u002b ba * h \u002b current_offset;\r\n    \r\n    \/\/ Taper Radius\r\n    let radius = r * (1.0 - h * 0.4);\r\n    \r\n    \/\/Distance with correction\r\n\r\n    return (length(p - pos_on_line) - radius) * 0.6; \r\n\u007d\r\n\r\nfn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -\u003e vec2f \u007b\r\n    let pa = p - a;\r\n    let ba = b - a;\r\n    let ba_length = length(ba);\r\n    \r\n    \/\/-------------------------STEM CURVE \r\n    let h = clamp( dot(pa, ba) \/ dot(ba, ba), 0.0, 1.0 );\r\n    let wiggle = sin(h * 10.28318) * 0.5;\r\n    let straightness_mask = pow((1.0 - h), 0.8); \r\n    let offset_dir = vec3f(bend, 0.0, bend * 0.2);\r\n    let current_offset = offset_dir * wiggle * straightness_mask;\r\n    \r\n    let pos_on_line = a \u002b ba * h \u002b current_offset;\r\n    let stem_radius = r * (1.0 - h * 0.4); \r\n    \r\n    let d_stem = (length(p - pos_on_line) - stem_radius) * 0.6;\r\n    \r\n    \/\/ ----------------------SPINES\r\n    var d_spine = 100.0;\r\n  \r\n    if (length(p - pos_on_line) \u003c 0.2 \u0026\u0026 h \u003e 0.1 \u0026\u0026 h \u003c 0.9) \u007b\r\n        let density = 15.0; \r\n        let id = floor(h * density);\r\n        let local_y = (fract(h * density) - 0.5) * (ba_length \/ density);\r\n        \r\n        var p_s = p - pos_on_line;\r\n        p_s = opRotateY(p_s, id * 2.4);\r\n        p_s.y = local_y; \r\n        p_s.x -= stem_radius; \r\n        p_s = opRotateZ(p_s, 1.57); \r\n        \r\n        let scale = 0.08;\r\n        d_spine = sdSpine(p_s \/ scale) * scale;\r\n    \u007d\r\n\r\n    \/\/ --------------------- LEAF\r\n    var d_leaf = 100.0;\r\n    \r\n    if (length(p - pos_on_line) \u003c 0.9) \u007b\r\n        let leaf_density = 4.5; \r\n        let id = floor(h * leaf_density);\r\n        \r\n        if (id \u003e 0.0 \u0026\u0026 id \u003c 4.0) \u007b\r\n            let local_y = (fract(h * leaf_density) - 0.5) * (ba_length \/ leaf_density);\r\n            \r\n            var p_l = p - pos_on_line;\r\n            p_l = opRotateY(p_l, id * 2.4 \u002b 1.0); \r\n            p_l.y = local_y; \r\n            \r\n            p_l.x -= (stem_radius - 0.01); \r\n            \r\n            \/\/ --- THE SWAY MATH ---\r\n            let time = uniforms.time;\r\n            \r\n            \/\/ Phase-shifted sine waves so each leaf moves independently\r\n            let wind_sway = sin(time * 3.5 \u002b id * 1.2) * 0.07; \r\n            let wind_twist = cos(time * 2.8 \u002b id * 1.5) * 0.05;\r\n            \r\n            \/\/ Apply bounce (Z axis) and twist (X axis)\r\n            let droop_angle = 0.3 - (id * 0.2) \u002b wind_sway; \r\n            p_l = opRotateZ(p_l, droop_angle); \r\n            p_l = opRotateX(p_l, wind_twist); \r\n            \/\/ ---------------------\r\n            \r\n            d_leaf = sdLeaf(p_l);\r\n        \u007d\r\n    \u007d\r\n\r\n    let d_stem_d_leaf = smin(d_stem, d_leaf, 0.003);\r\n    \r\n    var fin = smin(d_stem_d_leaf, d_spine, 0.01);\r\n    var material = MAT_STEM;\r\n    \r\n    if (d_spine \u003c d_stem_d_leaf) \u007b\r\n        material = MAT_THORNS; \r\n    \u007d\r\n    \r\n    return vec2f(fin, material);\r\n\u007d\r\n\r\n\r\nfn sdSpine(p: vec3f) -\u003e f32 \u007b\r\n    var q = p-vec3f(0.0,0.7,0.0);\r\n\r\n    q.z *=7.0; \r\n\r\n    q.x \/= abs(q.y)*0.7; \r\n    q.x -= (1\u002bq.y) * 1.5;\r\n\r\n\r\n    let h = 1.0;\r\n    let r = 0.15;\r\n\r\nreturn sdCone(q, vec2f(r,r), h);\r\n \r\n\u007d\r\n\r\nfn flower(p: vec3f, location: vec3f) -\u003e vec2f \u007b\r\n\r\n  let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.4;\r\n\r\n    if (d_sphere \u003e 1.3) \u007b\r\n        return vec2f(d_sphere,0);\r\n    \u007d\r\n\r\n  let time =uniforms.time;\r\n\r\n    let center = vec3f(sin(time)*0.05,(1-abs(sin(time)))*0.03, sin(time)*0.03);\r\n\r\n    let pos = p - (center \u002b location);\r\n\r\n   let pos_all =  p - location;\r\n    \r\n   let wind_bend = 0.3 \u002b sin( 1.5 ) * 0.01; \/\/0.2 \u002b sin(time * 1.5) * 0.1; \r\n    \r\n    let stem_start = vec3f(0.0, -location.y - 0.5, 0.0);\r\nlet stem_end = center; \r\n\r\n\r\n\/\/let d_stem = sdStem(pos_all, stem_start, stem_end, wind_bend, 0.04);\r\nlet d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);\r\n\r\n    var q = opPolarRep(pos, 5.0, 0.1);\r\n\r\n    let curve = q.x * q.x*8 ; \r\n    \r\n    let wave = sin(time \u002b q.x * 50.0) * 0.005 \u002b sin(time \u002b q.z * 50.0) * 0.005 \u002bsin(time \u002b q.x * 80.0) * 0.003 \u002b sin(time \u002b     q.z * 80.0) * 0.003 ;\r\n    \r\n    q.y \u002b= curve \u002b wave; \r\n\r\n    let size = 0.1;\r\n    let v1 = vec3f(0.0, 0.0, -1.0 * size * 0.5);\r\n    let v2 = vec3f(0.0, 0.0,  1.0 * size * 0.5); \r\n    let v3 = vec3f(1.5 * size, 0.0, 0.0);       \r\n\r\n   \r\n    let d_flat = udTriangle(q, v1, v2, v3);\r\n    let d_sepals = d_flat - 0.01; \r\n\r\n   \r\n\r\n    \/\/ ... inside flower(p, location) ...\r\n    var d_bud = sdVerticalVesicaSegment( pos - vec3f(0.0, -0.13, 0.0), 0.4, 0.20);\r\n    let cutoff_height = 0.1; \r\n    d_bud = max(d_bud, pos.y - cutoff_height);\r\n\r\n    \/\/ Grab both distance (.x) and material (.y)\r\n    let rose_data = sdRose(pos \u002b vec3f(0.0, -0.03, 0.0)); \r\n    let rose_dist = rose_data.x;\r\n    \r\n    var d_greenery = smin(d_stem.x, d_sepals, 0.02);\r\n    d_greenery = smin(d_greenery, d_bud, 0.02);\r\n\r\n    let flower_final = min(rose_dist, d_greenery); \r\n    var material = d_stem.y;\r\n\r\n    if(rose_dist \u003c d_greenery) \u007b\r\n        material = rose_data.y; \/\/ This passes the MAT_ROSE \u002b gradient forward!\r\n    \u007d \r\n    return vec2f(flower_final, material);\r\n\u007d\r\n\r\n\/\/ --- The Main Scene Description ---\r\n\r\nfn map(p_in: vec3f) -\u003e vec2f \u007b\r\n    var p = p_in;\r\n    \r\n    let time = uniforms.time ;\r\n\r\n    let a = atan2(p.z, p.x);\r\n    let r = length(p.xz);\r\n    \r\n    let hole_size = 0.5 \u002b sin(time *0.3) * 0.2; \/\/ Base size of the hole, oscillates over time\r\n\r\n    let dirt_radius = hole_size \u002b sin(sin(time * 0.1) * a * 7.0 \u002b time * 0.8) * 0.1*hole_size \u002b cos(a * 3.14 - time * 0.2) * 0.08*hole_size;\r\n\r\n    \/\/ 1. Create a sloped mask. \r\n    \/\/ It is 0.0 at the outer edge (dirt_radius) and ramps to 1.0 inside (70% of the radius).\r\n    let hole_mask = smoothstep(dirt_radius, dirt_radius * 0.7, r);\r\n    \r\n    \/\/ 2. Push the ground down based on the mask\r\n    let hole_depth = 0.2; \/\/ Adjust this to make the crater deeper or shallower\r\n    var ground_height = -0.5 - (hole_mask * hole_depth);\r\n    \r\n    var mat = MAT_GROUND;\r\n\r\n    if (r \u003c dirt_radius) \u007b\r\n        mat = MAT_DIRT;\r\n        \r\n        \/\/ Calculate the squirming dirt noise\r\n        let noise = sin(time \u002b p.x*10.0)*0.03 \u002b sin(time*3.0\u002bp.z*13.0)*0.03 \u002b \r\n                    sin(2.5*time \u002b p.x*15.0)*0.05 \u002b sin(2.0*time \u002b p.z*18.0)*0.01 \u002b \r\n                    sin(8.0*time\u002b30.0 \u002b p.x*110.0)*0.002 \u002b sin(time\u002b35.0\u002bp.z*115.0)*0.002 \u002b \r\n                    sin(6.0*time\u002b10.0 \u002b p.x*127.0)*0.001 \u002b sin(4.0*time\u002b5.0\u002bp.z*143.0)*0.001;\r\n        \r\n        \/\/ Apply noise, but multiply it by the mask so the edge of the hole \r\n        \/\/ stays perfectly flush with the outer ground, preventing seams.\r\n        ground_height \u002b= noise * hole_mask;\r\n    \u007d\r\n\r\n    \/\/ 3. Distance field evaluation. \r\n    \/\/ We multiply the final distance by 0.7 to prevent the ray from overstepping \r\n    \/\/ and causing black rendering artifacts due to our aggressive Y-axis warping!\r\n    var res = vec2f((p.y - ground_height) * 0.7, mat);\r\n\r\n    let flower_pos = vec3f(0.0, 2.0, 0.0);\r\n\r\n    let d_t =  flower(p, flower_pos);\r\n\r\n    if (d_t.x \u003c res.x) \u007b \r\n\r\n        res = vec2f(d_t.x, d_t.y); \r\n    \u007d\r\n\r\n \r\n\r\n    \/\/ New Petal Integration\r\n    let res_petals = sdFallingPetals(p, time);\r\n    if (res_petals.x \u003c res.x) \u007b\r\n        res = res_petals; \r\n    \u007d\r\n\r\n    return res; \r\n\u007d\r\n\r\nfn calc_normal(p: vec3f) -\u003e vec3f \u007b\r\n    let e = 0.002;\r\n  \r\n    let dx = map(p \u002b vec3f(e, 0.0, 0.0)).x - map(p - vec3f(e, 0.0, 0.0)).x;\r\n    let dy = map(p \u002b vec3f(0.0, e, 0.0)).x - map(p - vec3f(0.0, e, 0.0)).x;\r\n    let dz = map(p \u002b vec3f(0.0, 0.0, e)).x - map(p - vec3f(0.0, 0.0, e)).x;\r\n    \r\n    return normalize(vec3f(dx, dy, dz));\r\n\u007d\r\n\r\n\/\/ fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32) -\u003e f32 \u007b\r\n\/\/ \tvar res = 1.0;\r\n\/\/     var t = mint;\r\n\/\/     for(var i=0; i\u003c16; i\u002b\u002b) \u007b\r\n\/\/ \t\tlet h = map(ro \u002b rd*t).x;\r\n\/\/         res = min( res, 8.0*h\/t );\r\n\/\/         t \u002b= clamp( h, 0.01, 0.10 );\r\n\/\/         if( h\u003c0.001 || t\u003etmax ) \u007b break; \u007d\r\n\/\/     \u007d\r\n\/\/     return clamp( res, 0.0, 1.0 );\r\n\/\/ \u007d\r\nfn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -\u003e f32 \u007b\r\n    var res = 1.0;\r\n    var t = mint;\r\n    var ph = 1e20; \/\/ \u0022Previous h\u0022 - start with a huge number\r\n\r\n    for(var i = 0; i \u003c 16; i\u002b\u002b) \u007b \/\/ Increased iterations for accuracy\r\n        let h = map(ro \u002b rd * t).x;\r\n\r\n        \/\/ --- The Accuracy Fix ---\r\n        \/\/ Instead of just min(res, k*h\/t), we calculate the \r\n        \/\/ distance from the ray SEGMENT to the object.\r\n        \/\/ This effectively removes banding\/striations in the shadow.\r\n        \r\n        let y = h * h \/ (2.0 * ph); \r\n        let d = sqrt(h * h - y * y);\r\n        res = min(res, k * d \/ max(0.0, t - y));\r\n        \r\n        \/\/ ------------------------\r\n\r\n        ph = h;\r\n        \r\n        \/\/ Note: For your Rose Leaf, because of domain warping, \r\n        \/\/ the SDF is not exact. Multiply h by ~0.8 to prevent artifacts.\r\n        t \u002b= h; \r\n        \r\n        if(res \u003c 0.001 || t \u003e tmax) \u007b break; \u007d\r\n    \u007d\r\n    \r\n    \/\/ Smoothstep creates a cleaner falloff from light to dark\r\n    res = clamp(res, 0.0, 1.0);\r\n    return res * res * (3.0 - 2.0 * res); \r\n\u007d\r\n\r\n@fragment\r\n\r\nfn fs_main(@builtin(position) pos: vec4f) -\u003e @location(0) vec4f \u007b\r\n\r\n   \r\n\r\n   let resolution = uniforms.resolution;\r\n    let uv = (pos.xy * 2.0 - resolution) \/ resolution.y;\r\n    let uv_flipped = vec2f(uv.x, -uv.y);\r\n\r\n    let time = uniforms.time * 2.0 ;\r\n\r\n    let yaw =  uniforms.yaw ;   \/\/uniforms.camera.x;\r\n    let pitch =0.5 \u002b   clamp(uniforms.pitch,-1,1)*0.1; \/\/uniforms.camera.y;\r\n    let radius = 2.0;\r\n   let ro = vec3f(\r\n        radius * cos(pitch) * sin(yaw),\r\n        radius * sin(pitch) \u002b 2.0, \r\n        radius * cos(pitch) * cos(yaw)\r\n    ) \u002b vec3f(0.0, 0.0, 0.0);\r\n\r\n    let lookAt = vec3f(0.0, 2, 0.0);\r\n    \r\n    let fwd = normalize(lookAt - ro);\r\n    let right = normalize(cross(vec3f(0.0, 1.0, 0.0), fwd));\r\n    let up = cross(fwd, right);\r\n    let rd = normalize(fwd \u002b right * uv_flipped.x \u002b up * uv_flipped.y);\r\n    \r\n   var t = 0.0;        \r\n    var hit = false;    \r\n    var mat_id = -1.0;\r\n    \r\n    let current_rose_color = mix(COLOR_RED, COLOR_WHITE, uniforms.color_t);\r\n    let current_dissolve_color = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t); \/\/ The exact opposite!\r\n\r\n    \/\/ Create an accumulator for our volumetric bloom\r\n    var accumulated_glow = vec3f(0.0, 0.0, 0.0);\r\n\r\n    for(var i = 0; i \u003c 250; i\u002b\u002b) \u007b \r\n        let p = ro \u002b rd * t;\r\n        let res = map(p); \r\n        let d = res.x;\r\n        mat_id = res.y;\r\n\r\n        let mat_base = floor(mat_id);\r\n        let mat_frac = fract(mat_id); \/\/ EXTRACT IT HERE!\r\n\r\n        if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) \u007b\r\n            accumulated_glow \u002b= current_rose_color * (0.0008 \/ (0.01 \u002b d * d * 10.0));\r\n        \u007d\r\n         else if (mat_base == MAT_DISSOLVE) \u007b \r\n            \/\/ THE FIX: Multiply the bloom by mat_frac!\r\n            \/\/ Now the volumetric glow will smoothly fade out with the petal geometry.\r\n            accumulated_glow \u002b= current_dissolve_color * (0.0008 \/ (0.01 \u002b d * d * 1.0)) * mat_frac; \r\n        \u007d\r\n\r\n        if (d \u003c 0.001) \u007b hit = true; break; \u007d\r\n        if (t \u003e 20.0) \u007b break; \u007d\r\n        t = t \u002b d * 0.3; \r\n    \u007d\r\n    var final_color =vec3f(0.0, 0.0, 0.0);     \r\n\r\n   if (hit) \u007b\r\n        let p = ro \u002b rd * t;       \r\n        let normal = calc_normal(p); \r\n        let view_dir = normalize(ro - p); \/\/ Needed for specular shine\r\n        \r\n        let light_pos = vec3f(1.0,6.0, 0.0);\r\n        \r\n        \/\/ 1. Calculate Distance for Falloff\r\n        let light_vec = light_pos - p;\r\n        let light_dist = length(light_vec);\r\n        let light_dir = light_vec \/ light_dist; \/\/ Normalized direction\r\n        \r\n        let half_dir = normalize(light_dir \u002b view_dir); \r\n        \r\n        \/\/ 2. The Attenuation Math (Inverse Square Law with a softening factor)\r\n        let light_intensity = 11.0; \/\/ Boost the bulb power to compensate for falloff\r\n        let attenuation = light_intensity \/ (1.0 \u002b 0.1 * light_dist \u002b 0.15 * (light_dist * light_dist));\r\n        \r\n        let diff = clamp(dot(normal, light_dir), 0.1, 1.0);\r\n        let shadow = softshadow(p \u002b normal * 0.01, light_dir, 0.02, light_dist, 16.0);\r\n\r\n       var albedo = vec3f(0.0);\r\n        var roughness = 1.0;\r\n        var spec_power = 0.0;\r\n        var rim_light = 0.0;\r\n        var emission = vec3f(0.0); \/\/ 1. Add this new emission variable\r\n        \r\n        let mat_base = floor(mat_id);\r\n        let mat_frac = fract(mat_id);\r\n        \r\n        if (abs(mat_base - MAT_GROUND) \u003c 0.1) \u007b\r\n            albedo = vec3f(0.2, 0.2, 0.2);  \r\n            roughness = 10.0;   \r\n            spec_power = 0.3;\r\n            \r\n        \u007d else if (abs(mat_base - MAT_STEM) \u003c 0.1) \u007b\r\n            albedo = vec3f(0.05, 0.1, 0.02) * 0.8;\r\n            roughness = 180.0;   \r\n            spec_power = 1.2;\r\n             \r\n        \u007d else if (abs(mat_base - MAT_ROSE) \u003c 0.1) \u007b\r\n            let base_color = current_dissolve_color*0.6 ; \r\n            let tip_color = current_rose_color * 0.8; \/\/ Uses dynamic color\r\n            \r\n            albedo = mix(base_color, tip_color, smoothstep(0.0, 0.55, mat_frac));\r\n            \r\n            roughness = 180.0;    \r\n            spec_power = 1.2;\r\n            rim_light = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.95;\r\n            emission = albedo * 0.2;\r\n            \r\n        \u007d else if (abs(mat_base - MAT_DIRT) \u003c 0.1) \u007b \r\n            albedo = vec3f(0.0, 0.0, 0.0);  \r\n            roughness = 25.0;  \r\n            spec_power = 0.8;\r\n\r\n        \u007d else if (abs(mat_base - MAT_DISSOLVE) \u003c 0.1) \u007b\r\n            let glow_intensity = mat_frac;\r\n            let tip_color = current_rose_color * 0.8; \r\n            let glow_color = current_dissolve_color * 1.5; \/\/ Uses the opposite color\r\n            \r\n            albedo = mix(tip_color, glow_color, glow_intensity);\r\n            \r\n            roughness = 6.0;\r\n            spec_power = 0.1;\r\n            emission = glow_color * glow_intensity * 2.5;\r\n\r\n        \u007d else if (abs(mat_base - MAT_THORNS) \u003c 0.1) \u007b\r\n            albedo = current_rose_color; \/\/ Uses dynamic color\r\n            roughness = 60.0;    \r\n            spec_power = 0.5;\r\n        \u007d\r\n\r\n        let ambient = vec3f(0.45) * albedo; \r\n        let diffuse_color = albedo * diff * vec3f(1.0, 0.95, 0.8);\r\n        let diffuse = diffuse_color * attenuation; \r\n        let spec_angle = max(dot(normal, half_dir), 0.0);\r\n        let specular = pow(spec_angle, roughness) * spec_power * attenuation; \r\n        \r\n        \/\/ Add emission directly to the end. It ignores shadows and attenuation!\r\n        final_color = ambient \u002b diffuse \u002b (vec3f(1.0, 0.9, 0.8) * specular) \u002b (albedo * rim_light * attenuation) \u002b emission;\r\n    \u007d\r\n\r\n   if (hit) \u007b\r\n        let hit_mat = floor(mat_id);\r\n        if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE) \u007b\r\n            accumulated_glow *= 0.1; \r\n        \u007d\r\n    \u007d\r\n\r\n    \/\/ 2. Exponential Distance Fog (Applied FIRST)\r\n    \/\/ The geometry fades into the black void\r\n    let fog_density = 0.012; \r\n    let fog_factor = 1.0 - exp(-fog_density * t * t);\r\n    final_color = mix(final_color, vec3f(0.0, 0.0, 0.0), clamp(fog_factor, 0.0, 1.0));\r\n\r\n    \/\/ 3. Additive Volumetric Bloom (Applied SECOND)\r\n    \/\/ The gathered light dust is added on top, piercing the darkness\r\n\/\/    final_color \u002b= accumulated_glow;\r\n\r\n    \/\/ 4. Film Grain Noise\r\n    let noise = hash12(pos.xy \u002b uniforms.time);\r\n    final_color \u002b= (noise - 0.5) * (25.0 \/ 255.0);\r\n\r\n    return vec4f(final_color, 1.0);\r\n\u007d`;
+    
+
+    
+    const shaderModule = device.createShaderModule({ code: shaderCode });
+    const pipeline = device.createRenderPipeline({
+      layout: "auto",
+      vertex: { module: shaderModule, entryPoint: "vs_main" },
+      fragment: {
+        module: shaderModule,
+        entryPoint: "fs_main",
+        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }],
+      },
+      primitive: { topology: "triangle-list" },
+    });
+
+    
+  
+  
+  
+  const uniformBufferSize = 32; 
+  const uniformBuffer = device.createBuffer({
+    size: uniformBufferSize,
+    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+  });
+
+  const uniformValues = new Float32Array(8); 
+
+  const bindGroup = device.createBindGroup({
+    layout: pipeline.getBindGroupLayout(0),
+    entries: [
+      { binding: 0, resource: { buffer: uniformBuffer } },
+    ],
+  });
+
+  
+  let targetColorT = 0.0; 
+  let currentColorT = 0.0;
+
+  
+  window.addEventListener("keydown", (e) => {
+      
+      if (e.key.toLowerCase() === "c") { 
+          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
+      }
+  });
+
+  
+  let isDragging = false;
+  let lastMouseX = 0;
+  let lastMouseY = 0;
+  
+  
+  let startMouseX = 0;
+  let startMouseY = 0;
+  
+  let Multiplier = 0.5; 
+  let cameraPitch = 0.5; 
+  let cameraYaw = 0; 
+
+  
+  window.addEventListener("mousedown", (e) => {
+      isDragging = true;
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+      
+      
+      startMouseX = e.clientX;
+      startMouseY = e.clientY;
+  });
+
+  window.addEventListener("mouseup", (e) => {
+      isDragging = false;
+      
+      
+      let travelDistance = Math.abs(e.clientX - startMouseX) + Math.abs(e.clientY - startMouseY);
+      
+      
+      if (travelDistance < 5) {
+          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
+      }
+  });
+
+  window.addEventListener("mousemove", (e) => {
+      let rawMultiplier = (e.clientX / window.innerWidth) * 2.0 - 1.0;
+      Multiplier = Math.max(-1.0, Math.min(1.0, rawMultiplier));
+      cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+      
+      if (!isDragging) return;
+
+      lastMouseX = e.clientX;
+      lastMouseY = e.clientY;
+  });
+
+
+  
+  const resize = () => {
+    const w = window.innerWidth/2;
+    const h = window.innerHeight/2;
+    canvas.width = w;
+    canvas.height = h;
+    context.configure({
+      device: device,
+      format: navigator.gpu.getPreferredCanvasFormat(),
+      alphaMode: "premultiplied",
+    });
+    uniformValues[0] = w;
+    uniformValues[1] = h;
+  };
+  window.addEventListener("resize", resize);
+  resize(); 
+
+
+  let lastTime = performance.now() / 1000;
+
+  function frame() {
+    const time = performance.now() / 1000;
+    const dt = time - lastTime;
+    lastTime = time;
+
+    let speed = Multiplier * 0.7;
+    const minSpeed = 0.2; 
+
+    if (speed >= 0 && speed < minSpeed) {
+        speed = minSpeed;
+    } else if (speed < 0 && speed > -minSpeed) {
+        speed = -minSpeed;
+    }
+    
+    cameraYaw += speed * dt;
+
+    
+    
+    currentColorT+= (targetColorT - currentColorT) * 3.0 * dt;
+
+    
+    uniformValues[2] = time;           
+    uniformValues[3] = currentColorT;  
+    uniformValues[4] = cameraYaw;      
+    uniformValues[5] = cameraPitch;    
+
+    
+    device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
+
+    const commandEncoder = device.createCommandEncoder();
+    const textureView = context.getCurrentTexture().createView();
+    
+    const renderPassDescriptor = {
+      colorAttachments: [{
+        view: textureView,
+        clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+        loadOp: "clear",
+        storeOp: "store",
+      }],
+    };
+    
+    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
+    passEncoder.setPipeline(pipeline);
+    passEncoder.setBindGroup(0, bindGroup); 
+    passEncoder.draw(3);
+    passEncoder.end();
+    
+    device.queue.submit([commandEncoder.finish()]);
+    requestAnimationFrame(frame);
+  }
+  frame();
+  }
+  initWebGPU();
+</script>
+
+<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+<script>
+  kofiWidgetOverlay.draw('depis', {
+    'type': 'floating-chat',
+    'floating-chat.donateButton.text': 'Support me',
+    'floating-chat.donateButton.background-color': '#d9534f',
+    'floating-chat.donateButton.text-color': '#fff'
+  });
+</script>
+
+
+  
+</footer>
+<div
+  id="search-wrapper"
+  class="invisible fixed inset-0 flex h-screen w-screen cursor-default flex-col bg-neutral-500/50 p-4 backdrop-blur-sm dark:bg-neutral-900/50 sm:p-6 md:p-[10vh] lg:p-[12vh] z-500"
+  data-url="http://localhost:1313/">
+  <div
+    id="search-modal"
+    class="flex flex-col w-full max-w-3xl min-h-0 mx-auto border rounded-md shadow-lg top-20 border-neutral-200 bg-neutral dark:border-neutral-700 dark:bg-neutral-800">
+    <header class="relative z-10 flex items-center justify-between flex-none px-2">
+      <form class="flex items-center flex-auto min-w-0">
+        <div class="flex items-center justify-center w-8 h-8 text-neutral-400">
+          <span class="relative block icon"><svg aria-hidden="true" focusable="false" data-prefix="fas" data-icon="search" class="svg-inline--fa fa-search fa-w-16" role="img" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"><path fill="currentColor" d="M505 442.7L405.3 343c-4.5-4.5-10.6-7-17-7H372c27.6-35.3 44-79.7 44-128C416 93.1 322.9 0 208 0S0 93.1 0 208s93.1 208 208 208c48.3 0 92.7-16.4 128-44v16.3c0 6.4 2.5 12.5 7 17l99.7 99.7c9.4 9.4 24.6 9.4 33.9 0l28.3-28.3c9.4-9.4 9.4-24.6.1-34zM208 336c-70.7 0-128-57.2-128-128 0-70.7 57.2-128 128-128 70.7 0 128 57.2 128 128 0 70.7-57.2 128-128 128z"/></svg>
+</span>
+        </div>
+        <input
+          type="search"
+          id="search-query"
+          class="flex flex-auto h-12 mx-1 bg-transparent appearance-none focus:outline-dotted focus:outline-2 focus:outline-transparent"
+          placeholder="Search"
+          tabindex="0">
+      </form>
+      <button
+        id="close-search-button"
+        class="flex items-center justify-center w-8 h-8 text-neutral-700 hover:text-primary-600 dark:text-neutral dark:hover:text-primary-400"
+        title="Close (Esc)">
+        <span class="relative block icon"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 512"><path fill="currentColor" d="M310.6 361.4c12.5 12.5 12.5 32.75 0 45.25C304.4 412.9 296.2 416 288 416s-16.38-3.125-22.62-9.375L160 301.3L54.63 406.6C48.38 412.9 40.19 416 32 416S15.63 412.9 9.375 406.6c-12.5-12.5-12.5-32.75 0-45.25l105.4-105.4L9.375 150.6c-12.5-12.5-12.5-32.75 0-45.25s32.75-12.5 45.25 0L160 210.8l105.4-105.4c12.5-12.5 32.75-12.5 45.25 0s12.5 32.75 0 45.25l-105.4 105.4L310.6 361.4z"/></svg>
+</span>
+      </button>
+    </header>
+    <section class="flex-auto px-2 overflow-auto">
+      <ul id="search-results">
+        
+      </ul>
+    </section>
+  </div>
+</div>
+
+    </div>
+  </body>
+  
+</html>
