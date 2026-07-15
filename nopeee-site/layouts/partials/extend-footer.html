@@ -1,23 +1,52 @@
+
+
 <script type="module">
+  // Background WebGPU piece. Renders a raymarched scene behind the page on a
+  // handful of routes, and bows out quietly if WebGPU isn't available or the
+  // device clearly can't keep up.
+
+  const CONFIG = {
+    // Only run on these routes.
+    paths: ["/", "/about/", "/projects/", "/articles/"],
+
+    // Render resolution as a fraction of the window, per quality tier.
+    // 0.5 is the original half-res look; the lower tiers trade sharpness for
+    // frame rate on weaker hardware.
+    resolutionScale: { low: 0.20, medium: 0.40, high: 0.60 },
+
+    // Camera feel.
+    spinSpeed: 0.6,   // yaw speed at full horizontal mouse travel
+    minSpin: 0.2,     // never quite stop, so it keeps drifting when idle
+    colorFade: 3.0,   // red <-> white crossfade speed
+
+    // Adaptive quality. If we can't hold this frame rate across a window of
+    // frames we drop a tier. We only ever step down, never back up, so it
+    // settles instead of oscillating.
+    minFps: 40,
+    sampleFrames: 90,
+    warmupFrames: 30,
+  };
+
+  // Shader reads this as uniforms.quality (0 / 1 / 2).
+  const TIERS = ["low", "medium", "high"];
+
+  function pickStartTier() {
+    if (window.matchMedia) {
+      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
+      if (matchMedia("(pointer: coarse)").matches) return 1; // phones/tablets
+    }
+    return 2;
+  }
+
   async function initWebGPU() {
-    
-    // --- 1. CHECKS ---
-    
-  const allowedPaths = [
-        "/",         
-        "/about/",   
-        "/projects/",
-        "/articles/"    
-    ];
-
-    // Check if the current URL is in that list
-    // We strictly check the pathname (URL)
-    const shouldRun = allowedPaths.includes(window.location.pathname);
-
-    if (!shouldRun) return;
+    if (!CONFIG.paths.includes(window.location.pathname)) return;
     if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
 
-    // --- 2. SETUP CANVAS ---
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) { console.log("No WebGPU adapter"); return; }
+    const device = await adapter.requestDevice();
+
+    // Full-screen canvas pinned behind everything.
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -25,26 +54,21 @@
     Object.assign(canvas.style, {
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
-      zIndex: "-1", pointerEvents: "none" 
+      zIndex: "-1", pointerEvents: "none",
     });
 
-    // --- 3. INITIALIZE GPU ---
-    const adapter = await navigator.gpu.requestAdapter();
-    const device = await adapter.requestDevice();
     const context = canvas.getContext("webgpu");
+    const format = navigator.gpu.getPreferredCanvasFormat();
 
-    // --- 4. SHADER CODE (Safe Injection) ---
-    // Note: The path is relative to the "assets" folder
+    // Shader source is inlined by Hugo from the assets folder at build time.
     {{ $shader := resources.Get "shaders/main.wgsl" }}
-    
     {{ with $shader }}
         const shaderCode = `{{ .Content }}`;
     {{ else }}
         console.error("CRITICAL ERROR: 'assets/shaders/main.wgsl' not found!");
-        return; 
+        return;
     {{ end }}
 
-    // --- 5. PIPELINE SETUP ---
     const shaderModule = device.createShaderModule({ code: shaderCode });
     const pipeline = device.createRenderPipeline({
       layout: "auto",
@@ -52,162 +76,145 @@
       fragment: {
         module: shaderModule,
         entryPoint: "fs_main",
-        targets: [{ format: navigator.gpu.getPreferredCanvasFormat() }],
+        targets: [{ format }],
       },
       primitive: { topology: "triangle-list" },
     });
 
-    // --- 6. UNIFORM BUFFER SETUP ---
-  // We need more space now! 
-  // Old: [w, h, time, padding] (16 bytes)
-  // New: [w, h, time, padding, yaw, pitch, padding, padding] (32 bytes)
-  const uniformBufferSize = 32; 
-  const uniformBuffer = device.createBuffer({
-    size: uniformBufferSize,
-    usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-  });
-
-  const uniformValues = new Float32Array(8); // Increased to 8 floats
-
-  const bindGroup = device.createBindGroup({
-    layout: pipeline.getBindGroupLayout(0),
-    entries: [
-      { binding: 0, resource: { buffer: uniformBuffer } },
-    ],
-  });
-
-  // --- MOUSE CONTROL VARIABLES ---
-  let targetColorT = 0.0; // 0 = Red, 1 = White
-  let currentColorT = 0.0;
-
-  // --- KEYBOARD LISTENER ---
-  window.addEventListener("keydown", (e) => {
-      // Using e.key is safer across different keyboard layouts
-      if (e.key.toLowerCase() === "c") { 
-          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
-      }
-  });
-
-  // --- MOUSE CONTROL VARIABLES ---
-  let isDragging = false;
-  let lastMouseX = 0;
-  let lastMouseY = 0;
-  
-  // Track where the mouse started so we can distinguish a click from a drag
-  let startMouseX = 0;
-  let startMouseY = 0;
-  
-  let Multiplier = 0.5; 
-  let cameraPitch = 0.5; 
-  let cameraYaw = 0; 
-
-  // --- MOUSE EVENT LISTENERS ---
-  window.addEventListener("mousedown", (e) => {
-      isDragging = true;
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-      
-      // Record the exact starting pixel
-      startMouseX = e.clientX;
-      startMouseY = e.clientY;
-  });
-
-  window.addEventListener("mouseup", (e) => {
-      isDragging = false;
-      
-      // Calculate how far the mouse traveled while the button was held down
-      let travelDistance = Math.abs(e.clientX - startMouseX) + Math.abs(e.clientY - startMouseY);
-      
-      // If it moved less than 5 pixels, it was a Click, not a Drag! Toggle the color.
-      if (travelDistance < 5) {
-          targetColorT = targetColorT === 0.0 ? 1.0 : 0.0;
-      }
-  });
-
-  window.addEventListener("mousemove", (e) => {
-      let rawMultiplier = (e.clientX / window.innerWidth) * 2.0 - 1.0;
-      Multiplier = Math.max(-1.0, Math.min(1.0, rawMultiplier));
-      cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
-      
-      if (!isDragging) return;
-
-      lastMouseX = e.clientX;
-      lastMouseY = e.clientY;
-  });
-
-
-  // --- 7. RESIZE HANDLER ---
-  const resize = () => {
-    const w = window.innerWidth/2;
-    const h = window.innerHeight/2;
-    canvas.width = w;
-    canvas.height = h;
-    context.configure({
-      device: device,
-      format: navigator.gpu.getPreferredCanvasFormat(),
-      alphaMode: "premultiplied",
+    // 8 floats / 32 bytes: [w, h, time, colorT, yaw, pitch, quality, pad].
+    const uniformValues = new Float32Array(8);
+    const uniformBuffer = device.createBuffer({
+      size: uniformValues.byteLength,
+      usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
     });
-    uniformValues[0] = w;
-    uniformValues[1] = h;
-  };
-  window.addEventListener("resize", resize);
-  resize(); 
+    const bindGroup = device.createBindGroup({
+      layout: pipeline.getBindGroupLayout(0),
+      entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
+    });
 
+    // --- state -------------------------------------------------------------
+    let tier = pickStartTier();
+    uniformValues[6] = tier;
 
-  let lastTime = performance.now() / 1000;
+    let targetColorT = 0.0;   // 0 = red, 1 = white
+    let currentColorT = 0.0;
 
-  function frame() {
-    const time = performance.now() / 1000;
-    const dt = time - lastTime;
-    lastTime = time;
+    let spinInput = 0.5;      // -1..1 from horizontal mouse position
+    let cameraPitch = 0.5;    // -1..1 from vertical mouse position
+    let cameraYaw = 0.0;
 
-    let speed = Multiplier * 0.7;
-    const minSpeed = 0.2; 
+    // Only used to tell a click apart from a drag.
+    let pressX = 0, pressY = 0;
 
-    if (speed >= 0 && speed < minSpeed) {
-        speed = minSpeed;
-    } else if (speed < 0 && speed > -minSpeed) {
-        speed = -minSpeed;
+    const toggleColor = () => { targetColorT = targetColorT === 0.0 ? 1.0 : 0.0; };
+
+    window.addEventListener("keydown", (e) => {
+      if (e.key.toLowerCase() === "c") toggleColor();
+    });
+
+    window.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
+    window.addEventListener("mouseup", (e) => {
+      const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
+      if (travel < 5) toggleColor(); // a click, not a drag
+    });
+    window.addEventListener("mousemove", (e) => {
+      spinInput = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
+      cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+    });
+
+    // --- sizing ------------------------------------------------------------
+    function applySize() {
+      const scale = CONFIG.resolutionScale[TIERS[tier]];
+      const w = Math.max(1, Math.floor(window.innerWidth * scale));
+      const h = Math.max(1, Math.floor(window.innerHeight * scale));
+      canvas.width = w;
+      canvas.height = h;
+      context.configure({ device, format, alphaMode: "premultiplied" });
+      uniformValues[0] = w;
+      uniformValues[1] = h;
     }
-    
-    cameraYaw += speed * dt;
+    // Page zoom (Ctrl +/-) fires "resize" because CSS-pixel innerWidth changes
+    // even though the window's physical size hasn't. Track physical pixels and
+    // only rebuild the canvas when those move, so zooming the page leaves the
+    // artwork's resolution untouched.
+    let lastPhysW = 0, lastPhysH = 0;
+    function onResize() {
+      const dpr = window.devicePixelRatio || 1;
+      const physW = Math.round(window.innerWidth * dpr);
+      const physH = Math.round(window.innerHeight * dpr);
+      if (Math.abs(physW - lastPhysW) <= 2 && Math.abs(physH - lastPhysH) <= 2) return;
+      lastPhysW = physW;
+      lastPhysH = physH;
+      applySize();
+    }
+    window.addEventListener("resize", onResize);
+    onResize();
 
-    // Smoothly transition the color value
-    // Multiplying by 3.0 controls the speed of the fade
-    currentColorT+= (targetColorT - currentColorT) * 3.0 * dt;
+    // --- frame loop --------------------------------------------------------
+    let lastTime = performance.now() / 1000;
+    let sampleCount = 0;
+    let sampleTime = 0;
+    let warmup = CONFIG.warmupFrames;
 
-    // Update Uniform Array
-    uniformValues[2] = time;           // Time
-    uniformValues[3] = currentColorT;  // The new Color Transition value
-    uniformValues[4] = cameraYaw;      // Camera Yaw
-    uniformValues[5] = cameraPitch;    // Camera Pitch
+    function frame() {
+      const time = performance.now() / 1000;
+      // Clamp dt so a backgrounded tab doesn't fling the camera on return.
+      const dt = Math.min(time - lastTime, 0.1);
+      lastTime = time;
 
-    // Write to GPU
-    device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
+      // Keep a little idle spin regardless of how gentle the mouse input is.
+      let speed = spinInput * CONFIG.spinSpeed;
+      if (speed >= 0 && speed < CONFIG.minSpin) speed = CONFIG.minSpin;
+      else if (speed < 0 && speed > -CONFIG.minSpin) speed = -CONFIG.minSpin;
+      cameraYaw += speed * dt;
 
-    const commandEncoder = device.createCommandEncoder();
-    const textureView = context.getCurrentTexture().createView();
-    
-    const renderPassDescriptor = {
-      colorAttachments: [{
-        view: textureView,
-        clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
-        loadOp: "clear",
-        storeOp: "store",
-      }],
-    };
-    
-    const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
-    passEncoder.setPipeline(pipeline);
-    passEncoder.setBindGroup(0, bindGroup); 
-    passEncoder.draw(3);
-    passEncoder.end();
-    
-    device.queue.submit([commandEncoder.finish()]);
-    requestAnimationFrame(frame);
+      currentColorT += (targetColorT - currentColorT) * CONFIG.colorFade * dt;
+
+      uniformValues[2] = time;
+      uniformValues[3] = currentColorT;
+      uniformValues[4] = cameraYaw;
+      uniformValues[5] = cameraPitch;
+      device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
+
+      const encoder = device.createCommandEncoder();
+      const pass = encoder.beginRenderPass({
+        colorAttachments: [{
+          view: context.getCurrentTexture().createView(),
+          clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+          loadOp: "clear",
+          storeOp: "store",
+        }],
+      });
+      pass.setPipeline(pipeline);
+      pass.setBindGroup(0, bindGroup);
+      pass.draw(3);
+      pass.end();
+      device.queue.submit([encoder.finish()]);
+
+      // Watch the frame rate and step down a tier if we're struggling.
+      if (warmup > 0) {
+        warmup--;
+      } else if (tier > 0) {
+        sampleCount++;
+        sampleTime += dt;
+        if (sampleCount >= CONFIG.sampleFrames) {
+          const fps = sampleCount / sampleTime;
+          if (fps < CONFIG.minFps) {
+            tier--;
+            uniformValues[6] = tier;
+            applySize();
+            warmup = CONFIG.warmupFrames; // let the new tier settle
+          }
+          sampleCount = 0;
+          sampleTime = 0;
+        }
+      }
+
+      requestAnimationFrame(frame);
+    }
+    frame();
   }
-  frame();
-  }
+
   initWebGPU();
 </script>
 
@@ -220,4 +227,3 @@
     'floating-chat.donateButton.text-color': '#fff'
   });
 </script>
-
