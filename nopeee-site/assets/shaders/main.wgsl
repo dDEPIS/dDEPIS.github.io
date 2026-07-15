@@ -806,6 +806,80 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
     return vec2f(flower_final, material);
 }
 
+fn getPetalFloorEffects(p: vec3f, time: f32) -> vec3f { // RETURN CHANGED TO vec3f
+    let spacing = 2.0; 
+    let cell = floor(p.xz / spacing);
+    let local_p = fract(p.xz / spacing) - 0.5;
+    let sign_p = sign(local_p);
+    
+    var total_shadow = 0.0;
+    var total_light = 0.0;
+    var max_dissolve = 0.0; // NEW: Tracks how far the petal has dissolved
+    
+    for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
+        for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
+            let neighbor_offset = vec2f(i, j) * sign_p;
+            let current_cell = cell + neighbor_offset;
+            
+            let seed = hash12(current_cell);
+            let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
+            
+            let speed = 0.55 + seed * 0.25; 
+            let start_h = 7.0 + seed2 * 1.0;
+            let cycle_duration = 19.0;
+            
+            let local_time = (time + seed * 20.0) % cycle_duration;
+            let virtual_drop_y = start_h - (local_time * speed);
+            let ground_y = -0.45;
+            let ground_dist = virtual_drop_y - ground_y;
+            
+            if (ground_dist > -10.0 && ground_dist < 1.5) {
+                
+                var actual_y = virtual_drop_y;
+                let landing_zone = 0.5; 
+                
+                if (ground_dist < landing_zone && ground_dist > 0.0) {
+                    let t = ground_dist / landing_zone; 
+                    actual_y = ground_y + landing_zone * (t * t);
+                } else if (ground_dist <= 0.0) {
+                    actual_y = ground_y;
+                }
+                
+                var petal_xz = (current_cell + 0.5) * spacing;
+                let wind_damp = smoothstep(-0.1, 0.5, ground_dist);
+                petal_xz.x -= sin(time * 1.5 + seed * 10.0) * 0.25 * wind_damp;
+                petal_xz.y -= cos(time * 1.2 + seed2 * 10.0) * 0.25 * wind_damp;
+                
+                let dist_to_petal_2d = length(p.xz - petal_xz);
+                let height_above_floor = max(0.0, actual_y - p.y);
+                
+                // Matches your exact 3D petal dissolve timing
+                let dissolve_progress = smoothstep(12.0, 19.0, local_time);
+                let dissolve_fade = 1.0 - dissolve_progress;
+                
+                let shadow_radius = 0.12 + height_above_floor * 0.3;
+                let shadow_softness = smoothstep(shadow_radius, 0.0, dist_to_petal_2d);
+                let shadow_opacity = smoothstep(1.5, 0.0, height_above_floor) * 0.8; 
+                total_shadow += shadow_softness * shadow_opacity * dissolve_fade;
+                
+                let light_radius = 0.35;
+                let light_softness = smoothstep(light_radius, 0.0, dist_to_petal_2d);
+                let light_opacity = smoothstep(1.5, 0.0, height_above_floor);
+                
+                let current_light = light_softness * light_opacity * dissolve_fade;
+                total_light += current_light;
+                
+                // NEW: Grab the dissolve state only if the light is physically hitting this pixel
+                if (current_light > 0.0) {
+                    max_dissolve = max(max_dissolve, dissolve_progress);
+                }
+            }
+        }
+    }
+    // RETURN ALL THREE
+    return vec3f(clamp(total_shadow, 0.0, 1.0), clamp(total_light, 0.0, 1.0), max_dissolve);
+}
+
 // --- The Main Scene Description ---
 
 fn map(p_in: vec3f) -> vec2f {
@@ -844,10 +918,32 @@ fn map(p_in: vec3f) -> vec2f {
         ground_height += noise * hole_mask;
     }
 
-    // 3. Distance field evaluation. 
-    // We multiply the final distance by 0.7 to prevent the ray from overstepping 
-    // and causing black rendering artifacts due to our aggressive Y-axis warping!
+   
+   // 3. Distance field evaluation. 
     var res = vec2f((p.y - ground_height) * 0.7, mat);
+
+    // --- THE WRITHING BLACK CORE ---
+    // Anchor it to the exact same depth as the tentacle roots
+    let core_center = vec3f(0.0, -0.65, 0.0); 
+    
+    // Size it to perfectly fill the 'abyss' gap we left in the middle of the tentacles
+    let core_radius = hole_size * 0.55; 
+    
+    // Base sphere
+    var d_core = length(p - core_center) - core_radius;
+    
+    // High-frequency 3D noise to crush the sphere into a tangled ball of tendrils
+    let core_noise = sin(p.x * 40.0 + time * 4.0) * sin(p.y * 40.0 - time * 2.0) * sin(p.z * 40.0 + time * 3.5) * 0.04;
+                     
+    // Add the noise, and apply a 0.5 safety brake so the raymarcher doesn't 
+    // tear through the heavy displacement!
+    d_core = (d_core + core_noise) * 0.5; 
+    
+    if (d_core < res.x) {
+        // MAT_DIRT is your pitch-black, matte material. 
+        // It perfectly matches the black lobes of the tentacles!
+        res = vec2f(d_core, MAT_DIRT); 
+    }
 
 
 // --- NEW: THE WRITHING TENTACLES ---
@@ -898,14 +994,23 @@ fn calc_normal(p: vec3f) -> vec3f {
 //     }
 //     return clamp( res, 0.0, 1.0 );
 // }
+fn map_shadow(p: vec3f) -> f32 {
+    let time = uniforms.time;
+    // Only evaluate the things we want casting shadows!
+    let d_tentacles = sdTentacles(p, time, 0.5 + sin(time *0.3) * 0.2).x;
+   // let d_petals = sdFallingPetals(p, time).x;
+    
+    return d_tentacles;
+}
+
 fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
     var res = 1.0;
     var t = mint;
     var ph = 1e20; // "Previous h" - start with a huge number
 
     for(var i = 0; i < 16; i++) { // Increased iterations for accuracy
-        let h = map(ro + rd * t).x;
-
+        //let h = map(ro + rd * t).x;
+        let h = map_shadow(ro + rd * t);
         // --- The Accuracy Fix ---
         // Instead of just min(res, k*h/t), we calculate the 
         // distance from the ray SEGMENT to the object.
@@ -1031,6 +1136,21 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             albedo = vec3f(0.2, 0.2, 0.2);  
             roughness = 10.0;   
             spec_power = 0.3;
+
+           let floor_effects = getPetalFloorEffects(p, uniforms.time);
+            let shadow_amt = floor_effects.x;
+            let light_amt = floor_effects.y;
+            let color_shift = floor_effects.z; // NEW: The dissolve progress (0.0 to 1.0)
+            
+            albedo = albedo * (1.0 - shadow_amt);
+            
+            let base_light = mix(COLOR_RED, COLOR_WHITE, uniforms.color_t);
+            let dissolve_light = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t); // The opposite color
+            
+            // Crossfade the final light on the floor as the petal burns
+            let final_glow_color = mix(base_light, dissolve_light, color_shift);
+            
+            emission += final_glow_color * light_amt * 1.5;
             
         } else if (abs(mat_base - MAT_STEM) < 0.1) {
             albedo = vec3f(0.05, 0.1, 0.02) * 1.5;
@@ -1086,7 +1206,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
         let ambient = vec3f(0.45) * albedo; 
         let diffuse_color = albedo * diff * vec3f(1.0, 0.95, 0.8);
-        let diffuse = diffuse_color * attenuation ;// *shadow
+        let diffuse = diffuse_color * attenuation* shadow ;// 
         let spec_angle = max(dot(normal, half_dir), 0.0);
         let specular = pow(spec_angle, roughness) * spec_power * attenuation; 
         
@@ -1102,15 +1222,36 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         }
     }
 
-    // 2. Exponential Distance Fog (Applied FIRST)
-    // The geometry fades into the black void
+    // 2. Exponential Distance Fog (Your existing code)
     let fog_density = 0.012; 
     let fog_factor = 1.0 - exp(-fog_density * t * t);
     final_color = mix(final_color, vec3f(0.0, 0.0, 0.0), clamp(fog_factor, 0.0, 1.0));
 
-    // 3. Additive Volumetric Bloom (Applied SECOND)
-    // The gathered light dust is added on top, piercing the darkness
-    final_color += accumulated_glow;
+    
+
+   // --- 3. Additive Volumetric Bloom ---
+    // A very light depth fog strictly for the glow. 
+    // We use 0.003 (much weaker than the 0.012 geometry fog) so the light 
+    // lingers in the air longer than the solid objects before softly fading out!
+    let glow_fog_density = 0.002; 
+    let glow_fog = exp(-glow_fog_density * t * t);
+    
+    // Multiply the accumulated glow by the light fog before adding it to the scene
+    final_color += accumulated_glow * glow_fog;
+
+    // --- NEW: GROUND HEIGHT MIST ---
+    if (hit) {
+        let p = ro + rd * t;
+        // Mist is thickest at -0.5 (ground) and fades out completely by 0.2 (mid-air)
+        let mist_thickness = smoothstep(0.7, -0.5, p.y);
+        
+        // We multiply by (1.0 - fog_factor) so the mist fades into the black void in the distance
+        let mist_intensity = mist_thickness * 0.6* (1.0 - fog_factor); 
+        
+        let mist_color = current_dissolve_color;  // current_rose_color; 
+        final_color = mix(final_color, mist_color, mist_intensity);
+    }
+
 
     // 4. Film Grain Noise
     let noise = hash12(pos.xy + uniforms.time);
