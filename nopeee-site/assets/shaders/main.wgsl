@@ -32,8 +32,8 @@ const NORMAL_EPS = 0.002;   // sample spread for the shading normal
 
 // Per-tier step budgets. Fewer steps is faster, but far/grazing rays give up
 // sooner; the distance fog hides most of that here.
-const STEPS_LOW    : i32 = 90;
-const STEPS_MEDIUM : i32 = 160;
+const STEPS_LOW    : i32 = 200;
+const STEPS_MEDIUM : i32 = 230;
 const STEPS_HIGH   : i32 = 250;
 const SHADOW_STEPS : i32 = 16;
 
@@ -794,12 +794,12 @@ fn map(p_in: vec3f) -> vec2f {
         res = vec2f(d_t.x, d_t.y);
     }
 
-    if (extras_enabled()) {
+   
         let res_petals = sdFallingPetals(p, time);
         if (res_petals.x < res.x) {
             res = res_petals;
         }
-    }
+    
 
     return res;
 }
@@ -829,7 +829,7 @@ fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
     var res = 1.0;
     var t = mint;
     var ph = 1e20;
-
+  if (extras_enabled()) {
     for(var i = 0; i < SHADOW_STEPS; i++) {
 
         let h = map_shadow(ro + rd * t);
@@ -844,7 +844,7 @@ fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
 
         if(res < 0.001 || t > tmax) { break; }
     }
-
+  }
     res = clamp(res, 0.0, 1.0);
     return res * res * (3.0 - 2.0 * res);
 }
