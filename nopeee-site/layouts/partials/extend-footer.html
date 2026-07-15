@@ -1,5 +1,3 @@
-
-
 <script type="module">
   // Background WebGPU piece. Renders a raymarched scene behind the page on a
   // handful of routes, and bows out quietly if WebGPU isn't available or the
@@ -19,21 +17,31 @@
     minSpin: 0.2,     // never quite stop, so it keeps drifting when idle
     colorFade: 3.0,   // red <-> white crossfade speed
 
-    // Adaptive quality. If we can't hold this frame rate across a window of
-    // frames we drop a tier. We only ever step down, never back up, so it
-    // settles instead of oscillating.
-    minFps: 40,
-    sampleFrames: 90,
-    warmupFrames: 30,
+    // Adaptive quality. We start at the cheapest tier and only climb when the
+    // device shows headroom, so weak hardware never has to render an expensive
+    // tier just to find out it can't. To keep it from flip-flopping there's a
+    // dead band between the two thresholds, and once a tier proves too heavy we
+    // lower the ceiling so it's never attempted again.
+    upgradeFps: 55,     // climb a tier only with at least this much headroom
+    minFps: 40,         // drop a tier (and lock it out) below this
+    sampleFrames: 45,   // frames per measurement window
+    warmupFrames: 15,   // frames to ignore after any tier change
+
+    // A tier change swaps resolution instantly; we mask the swap with a short
+    // blur that eases back to sharp, so it reads as a focus-in instead of a pop.
+    focusBlur: 6,       // px of blur used to hide the biggest swaps
+    focusMs: 600,       // duration of the refocus
   };
 
   // Shader reads this as uniforms.quality (0 / 1 / 2).
   const TIERS = ["low", "medium", "high"];
 
-  function pickStartTier() {
+  // Highest tier a device is allowed to reach. Reduced-motion stays at the
+  // cheapest level; touch devices cap at medium; desktop can climb all the way.
+  function pickCeiling() {
     if (window.matchMedia) {
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
-      if (matchMedia("(pointer: coarse)").matches) return 1; // phones/tablets
+      if (matchMedia("(pointer: coarse)").matches) return 1;
     }
     return 2;
   }
@@ -55,6 +63,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
+      filter: "blur(0px)",
     });
 
     const context = canvas.getContext("webgpu");
@@ -93,7 +102,8 @@
     });
 
     // --- state -------------------------------------------------------------
-    let tier = pickStartTier();
+    let ceiling = pickCeiling();
+    let tier = 0;             // start cheap and climb toward the ceiling
     uniformValues[6] = tier;
 
     let targetColorT = 0.0;   // 0 = red, 1 = white
@@ -123,20 +133,39 @@
     });
 
     // --- sizing ------------------------------------------------------------
+    // Configure the swapchain once; resizing the canvas element afterwards is
+    // enough on its own — the next getCurrentTexture() adopts the new size.
+    context.configure({ device, format, alphaMode: "premultiplied" });
+
+    // Snap the backing store to the current tier's scale. Only touches the
+    // canvas when the integer pixel dimensions actually change.
     function applySize() {
       const scale = CONFIG.resolutionScale[TIERS[tier]];
       const w = Math.max(1, Math.floor(window.innerWidth * scale));
       const h = Math.max(1, Math.floor(window.innerHeight * scale));
+      if (w === canvas.width && h === canvas.height) return;
       canvas.width = w;
       canvas.height = h;
-      context.configure({ device, format, alphaMode: "premultiplied" });
       uniformValues[0] = w;
       uniformValues[1] = h;
     }
+
+    // Hide a resolution swap under a quick refocus: jump to a blur sized to the
+    // swap, then let CSS ease it back to sharp. Bigger jumps blur more; steady
+    // state stays at blur(0) so there's no ongoing cost.
+    function focusPulse(oldScale, newScale) {
+      const k = Math.min(CONFIG.focusBlur, Math.abs(oldScale - newScale) * 22);
+      if (k < 0.1) return;
+      canvas.style.transition = "none";
+      canvas.style.filter = `blur(${k}px)`;
+      void canvas.offsetWidth;                 // commit the blur before easing
+      canvas.style.transition = `filter ${CONFIG.focusMs}ms ease-out`;
+      canvas.style.filter = "blur(0px)";
+    }
+
     // Page zoom (Ctrl +/-) fires "resize" because CSS-pixel innerWidth changes
     // even though the window's physical size hasn't. Track physical pixels and
-    // only rebuild the canvas when those move, so zooming the page leaves the
-    // artwork's resolution untouched.
+    // only rebuild when those move, so zooming leaves the resolution untouched.
     let lastPhysW = 0, lastPhysH = 0;
     function onResize() {
       const dpr = window.devicePixelRatio || 1;
@@ -191,22 +220,33 @@
       pass.end();
       device.queue.submit([encoder.finish()]);
 
-      // Watch the frame rate and step down a tier if we're struggling.
+      // Adapt quality. Ignore a few frames after any change, then measure a
+      // window: climb toward the ceiling when there's headroom, or fall back
+      // (and drop the ceiling) when the current tier is too heavy.
       if (warmup > 0) {
         warmup--;
-      } else if (tier > 0) {
+      } else {
         sampleCount++;
         sampleTime += dt;
         if (sampleCount >= CONFIG.sampleFrames) {
           const fps = sampleCount / sampleTime;
-          if (fps < CONFIG.minFps) {
+          const oldScale = CONFIG.resolutionScale[TIERS[tier]];
+          if (fps < CONFIG.minFps && tier > 0) {
             tier--;
+            ceiling = tier;              // this tier was too heavy; don't retry it
             uniformValues[6] = tier;
             applySize();
-            warmup = CONFIG.warmupFrames; // let the new tier settle
+            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
+            warmup = CONFIG.warmupFrames;
+          } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
+            tier++;
+            uniformValues[6] = tier;
+            applySize();
+            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
+            warmup = CONFIG.warmupFrames;
           }
           sampleCount = 0;
-          sampleTime = 0;
+          sampleTime = 0; 
         }
       }
 

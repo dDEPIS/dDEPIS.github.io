@@ -531,9 +531,7 @@
     integrity="sha512-7gNIjxnJPC77GZ4uMBTqXzyyzn1FFUrbM5mhWMrCfKUoMdsknt5btgJwDvh&#43;sCQ0E53ghYrxgYqw&#43;0GCRyIEpA=="></script>
   
   
-    
-
-<script type="module">
+    <script type="module">
   
   
   
@@ -555,18 +553,28 @@
     
     
     
-    minFps: 40,
-    sampleFrames: 90,
-    warmupFrames: 30,
+    
+    
+    upgradeFps: 55,     
+    minFps: 40,         
+    sampleFrames: 45,   
+    warmupFrames: 15,   
+
+    
+    
+    focusBlur: 6,       
+    focusMs: 600,       
   };
 
   
   const TIERS = ["low", "medium", "high"];
 
-  function pickStartTier() {
+  
+  
+  function pickCeiling() {
     if (window.matchMedia) {
       if (matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
-      if (matchMedia("(pointer: coarse)").matches) return 1; 
+      if (matchMedia("(pointer: coarse)").matches) return 1;
     }
     return 2;
   }
@@ -588,6 +596,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
+      filter: "blur(0px)",
     });
 
     const context = canvas.getContext("webgpu");
@@ -623,7 +632,8 @@
     });
 
     
-    let tier = pickStartTier();
+    let ceiling = pickCeiling();
+    let tier = 0;             
     uniformValues[6] = tier;
 
     let targetColorT = 0.0;   
@@ -653,17 +663,36 @@
     });
 
     
+    
+    
+    context.configure({ device, format, alphaMode: "premultiplied" });
+
+    
+    
     function applySize() {
       const scale = CONFIG.resolutionScale[TIERS[tier]];
       const w = Math.max(1, Math.floor(window.innerWidth * scale));
       const h = Math.max(1, Math.floor(window.innerHeight * scale));
+      if (w === canvas.width && h === canvas.height) return;
       canvas.width = w;
       canvas.height = h;
-      context.configure({ device, format, alphaMode: "premultiplied" });
       uniformValues[0] = w;
       uniformValues[1] = h;
     }
+
     
+    
+    
+    function focusPulse(oldScale, newScale) {
+      const k = Math.min(CONFIG.focusBlur, Math.abs(oldScale - newScale) * 22);
+      if (k < 0.1) return;
+      canvas.style.transition = "none";
+      canvas.style.filter = `blur(${k}px)`;
+      void canvas.offsetWidth;                 
+      canvas.style.transition = `filter ${CONFIG.focusMs}ms ease-out`;
+      canvas.style.filter = "blur(0px)";
+    }
+
     
     
     
@@ -722,21 +751,32 @@
       device.queue.submit([encoder.finish()]);
 
       
+      
+      
       if (warmup > 0) {
         warmup--;
-      } else if (tier > 0) {
+      } else {
         sampleCount++;
         sampleTime += dt;
         if (sampleCount >= CONFIG.sampleFrames) {
           const fps = sampleCount / sampleTime;
-          if (fps < CONFIG.minFps) {
+          const oldScale = CONFIG.resolutionScale[TIERS[tier]];
+          if (fps < CONFIG.minFps && tier > 0) {
             tier--;
+            ceiling = tier;              
             uniformValues[6] = tier;
             applySize();
-            warmup = CONFIG.warmupFrames; 
+            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
+            warmup = CONFIG.warmupFrames;
+          } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
+            tier++;
+            uniformValues[6] = tier;
+            applySize();
+            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
+            warmup = CONFIG.warmupFrames;
           }
           sampleCount = 0;
-          sampleTime = 0;
+          sampleTime = 0; 
         }
       }
 
