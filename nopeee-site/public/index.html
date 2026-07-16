@@ -996,7 +996,6 @@
     <script type="module">
   
   
-  
 
   const CONFIG = {
     
@@ -1004,8 +1003,7 @@
 
     
     
-    
-    resolutionScale: { low: 0.20, medium: 0.40, high: 0.50 },
+    resolutionScale: { low: 0.20, medium: 0.35, high: 0.50 },
 
     
     spinSpeed: 0.6,   
@@ -1015,13 +1013,8 @@
     
     
     
-    
-    upgradeFps: 55,          
-    minFps: 40,              
-    sampleFrames: 30,        
-    warmupFrames: 10,        
-    maxCalibrationMs: 4000,  
-    revealMs: 800,           
+    introBlur: 10,    
+    introMs: 1200,    
   };
 
   
@@ -1029,12 +1022,14 @@
 
   
   
-  function pickCeiling() {
-    if (window.matchMedia) {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
-      if (matchMedia("(pointer: coarse)").matches) return 1;
-    }
-    return 2;
+  
+  function pickTier() {
+    const mm = (q) => window.matchMedia && matchMedia(q).matches;
+    const reduce = mm("(prefers-reduced-motion: reduce)");
+    let tier = 2;
+    if (reduce) tier = 0;
+    else if (mm("(pointer: coarse)")) tier = 1;
+    return { tier, reduce };
   }
 
   async function initWebGPU() {
@@ -1044,6 +1039,8 @@
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
+
+    const { tier, reduce } = pickTier();
 
     
     
@@ -1055,7 +1052,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      opacity: "0", transition: `opacity ${CONFIG.revealMs}ms ease-out`,
+      filter: reduce ? "blur(0px)" : `blur(${CONFIG.introBlur}px)`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -1081,6 +1078,7 @@
 
     
     const uniformValues = new Float32Array(8);
+    uniformValues[6] = tier;
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -1091,14 +1089,6 @@
     });
 
     
-    const startTime = performance.now() / 1000;
-    let ceiling = pickCeiling();
-    let tier = 0;             
-    uniformValues[6] = tier;
-
-    let revealed = false;
-    let stableWindows = 0;    
-
     let targetColorT = 0.0;   
     let currentColorT = 0.0;
 
@@ -1130,8 +1120,6 @@
     
     context.configure({ device, format, alphaMode: "premultiplied" });
 
-    
-    
     function applySize() {
       const scale = CONFIG.resolutionScale[TIERS[tier]];
       const w = Math.max(1, Math.floor(window.innerWidth * scale));
@@ -1161,9 +1149,7 @@
 
     
     let lastTime = performance.now() / 1000;
-    let sampleCount = 0;
-    let sampleTime = 0;
-    let warmup = CONFIG.warmupFrames;
+    let introStarted = false;
 
     function frame() {
       const time = performance.now() / 1000;
@@ -1201,42 +1187,12 @@
       device.queue.submit([encoder.finish()]);
 
       
-      
-      
-      if (!revealed) {
-        if (warmup > 0) {
-          warmup--;
-        } else {
-          sampleCount++;
-          sampleTime += dt;
-          if (sampleCount >= CONFIG.sampleFrames) {
-            const fps = sampleCount / sampleTime;
-            let changed = false;
-            if (fps < CONFIG.minFps && tier > 0) {
-              tier--;
-              ceiling = tier;          
-              changed = true;
-            } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
-              tier++;
-              changed = true;
-            }
-            if (changed) {
-              uniformValues[6] = tier;
-              applySize();
-              warmup = CONFIG.warmupFrames;
-              stableWindows = 0;
-            } else {
-              stableWindows++;
-            }
-            sampleCount = 0;
-            sampleTime = 0;
-          }
-        } 
-
-        
-        if (stableWindows >= 1 || time - startTime > CONFIG.maxCalibrationMs / 1000) {
-          revealed = true;
-          canvas.style.opacity = "1";
+      if (!introStarted) {
+        introStarted = true;
+        if (!reduce) {
+          canvas.style.transition = `filter ${CONFIG.introMs}ms ease-out`;
+          void canvas.offsetWidth;           
+          canvas.style.filter = "blur(0px)";
         }
       }
 

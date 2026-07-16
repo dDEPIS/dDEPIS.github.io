@@ -1,45 +1,40 @@
 <script type="module">
   // Background WebGPU piece. Renders a raymarched scene behind the page on a
-  // handful of routes, and bows out quietly if WebGPU isn't available or the
-  // device clearly can't keep up.
+  // handful of routes, and bows out quietly if WebGPU isn't available.
 
   const CONFIG = {
     // Only run on these routes.
     paths: ["/", "/about/", "/projects/", "/articles/"],
 
-    // Render resolution as a fraction of the window, per quality tier.
-    // 0.5 is the original half-res look; the lower tiers trade sharpness for
-    // frame rate on weaker hardware.
-    resolutionScale: { low: 0.20, medium: 0.40, high: 0.50 },
+    // Render resolution as a fraction of the window, per tier. 0.5 is the
+    // original half-res look; lower tiers are cheaper on weaker hardware.
+    resolutionScale: { low: 0.20, medium: 0.35, high: 0.50 },
 
     // Camera feel.
     spinSpeed: 0.6,   // yaw speed at full horizontal mouse travel
     minSpin: 0.2,     // never quite stop, so it keeps drifting when idle
     colorFade: 3.0,   // red <-> white crossfade speed
 
-    // Quality is calibrated ONCE, while the canvas is still invisible: start
-    // cheap, climb only when there's headroom, settle, then fade in at the
-    // chosen tier and leave it there. That way the viewer never sees the
-    // resolution stepping around — just one clean fade-in.
-    upgradeFps: 55,          // climb a tier only with at least this much headroom
-    minFps: 40,              // drop a tier (and lock it out) below this
-    sampleFrames: 30,        // frames per calibration window
-    warmupFrames: 10,        // frames to ignore after each tier change
-    maxCalibrationMs: 4000,  // reveal anyway if it hasn't settled by now
-    revealMs: 800,           // fade-in duration once calibrated
+    // Intro: the background comes up blurry and sharpens once. This is the
+    // visible "low to high" — a blur reads like resolution, eases smoothly on
+    // any device, and only runs at load.
+    introBlur: 10,    // px the intro starts from (higher = starts softer)
+    introMs: 1200,    // how long it takes to sharpen
   };
 
   // Shader reads this as uniforms.quality (0 / 1 / 2).
   const TIERS = ["low", "medium", "high"];
 
-  // Highest tier a device is allowed to reach. Reduced-motion stays at the
-  // cheapest level; touch devices cap at medium; desktop can climb all the way.
-  function pickCeiling() {
-    if (window.matchMedia) {
-      if (matchMedia("(prefers-reduced-motion: reduce)").matches) return 0;
-      if (matchMedia("(pointer: coarse)").matches) return 1;
-    }
-    return 2;
+  // Pick a tier once, from the device — no frame-rate guessing, so it's the
+  // same every load. Reduced-motion stays low, touch devices medium, desktop
+  // high. Returns { tier, reduce }.
+  function pickTier() {
+    const mm = (q) => window.matchMedia && matchMedia(q).matches;
+    const reduce = mm("(prefers-reduced-motion: reduce)");
+    let tier = 2;
+    if (reduce) tier = 0;
+    else if (mm("(pointer: coarse)")) tier = 1;
+    return { tier, reduce };
   }
 
   async function initWebGPU() {
@@ -50,8 +45,10 @@
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
 
-    // Full-screen canvas pinned behind everything. Starts invisible and fades
-    // in once quality has been calibrated.
+    const { tier, reduce } = pickTier();
+
+    // Full-screen canvas pinned behind everything. Starts blurry and eases to
+    // sharp (unless the visitor asked for reduced motion).
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -60,7 +57,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      opacity: "0", transition: `opacity ${CONFIG.revealMs}ms ease-out`,
+      filter: reduce ? "blur(0px)" : `blur(${CONFIG.introBlur}px)`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -89,6 +86,7 @@
 
     // 8 floats / 32 bytes: [w, h, time, colorT, yaw, pitch, quality, pad].
     const uniformValues = new Float32Array(8);
+    uniformValues[6] = tier;
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -98,15 +96,7 @@
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
     });
 
-    // --- state -------------------------------------------------------------
-    const startTime = performance.now() / 1000;
-    let ceiling = pickCeiling();
-    let tier = 0;             // start cheap and climb toward the ceiling
-    uniformValues[6] = tier;
-
-    let revealed = false;
-    let stableWindows = 0;    // consecutive calibration windows with no change
-
+    // --- interaction state -------------------------------------------------
     let targetColorT = 0.0;   // 0 = red, 1 = white
     let currentColorT = 0.0;
 
@@ -138,8 +128,6 @@
     // enough on its own — the next getCurrentTexture() adopts the new size.
     context.configure({ device, format, alphaMode: "premultiplied" });
 
-    // Snap the backing store to the current tier's scale. Only touches the
-    // canvas when the integer pixel dimensions actually change.
     function applySize() {
       const scale = CONFIG.resolutionScale[TIERS[tier]];
       const w = Math.max(1, Math.floor(window.innerWidth * scale));
@@ -169,9 +157,7 @@
 
     // --- frame loop --------------------------------------------------------
     let lastTime = performance.now() / 1000;
-    let sampleCount = 0;
-    let sampleTime = 0;
-    let warmup = CONFIG.warmupFrames;
+    let introStarted = false;
 
     function frame() {
       const time = performance.now() / 1000;
@@ -208,43 +194,13 @@
       pass.end();
       device.queue.submit([encoder.finish()]);
 
-      // Calibrate quality while the canvas is still invisible: climb when there
-      // is headroom, drop (and lock the ceiling) when a tier is too heavy. Once
-      // the tier holds steady for a window, fade in and stop touching it.
-      if (!revealed) {
-        if (warmup > 0) {
-          warmup--;
-        } else {
-          sampleCount++;
-          sampleTime += dt;
-          if (sampleCount >= CONFIG.sampleFrames) {
-            const fps = sampleCount / sampleTime;
-            let changed = false;
-            if (fps < CONFIG.minFps && tier > 0) {
-              tier--;
-              ceiling = tier;          // too heavy; never try this tier again
-              changed = true;
-            } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
-              tier++;
-              changed = true;
-            }
-            if (changed) {
-              uniformValues[6] = tier;
-              applySize();
-              warmup = CONFIG.warmupFrames;
-              stableWindows = 0;
-            } else {
-              stableWindows++;
-            }
-            sampleCount = 0;
-            sampleTime = 0;
-          }
-        } 
-
-        // Reveal once it's settled, or after a hard time cap as a fallback.
-        if (stableWindows >= 1 || time - startTime > CONFIG.maxCalibrationMs / 1000) {
-          revealed = true;
-          canvas.style.opacity = "1";
+      // Once the first frame is on screen, ease the intro blur off to sharp.
+      if (!introStarted) {
+        introStarted = true;
+        if (!reduce) {
+          canvas.style.transition = `filter ${CONFIG.introMs}ms ease-out`;
+          void canvas.offsetWidth;           // commit the starting blur first
+          canvas.style.filter = "blur(0px)";
         }
       }
 
