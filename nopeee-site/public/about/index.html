@@ -575,40 +575,50 @@
     <script type="module">
   
   
+  
+  
+  
+  
+  
 
   const CONFIG = {
-    
     paths: ["/", "/about/", "/projects/", "/articles/"],
 
     
-    
-    resolutionScale: { low: 0.20, medium: 0.35, high: 0.50 },
+    startScale:  0.22,  
+    minScale:    0.15,  
+    maxCoarse:   0.42,  
+    maxFine:     0.55,  
+    reduceScale: 0.24,  
 
     
-    spinSpeed: 0.6,   
-    minSpin: 0.2,     
-    colorFade: 3.0,   
+    
+    
+    
+    slowMs:   19.0,     
+    fastMs:   17.0,     
+    downStep: 0.040,    
+    upStep:   0.006,    
+    govWindow: 20,      
+    scaleLerp: 4.0,     
 
     
     
     
-    introBlur: 10,    
-    introMs: 1200,    
+    maxBlur: 6.0,
+
+    
+    spinSpeed: 0.6,
+    minSpin:   0.2,
+    colorFade: 3.0,
   };
 
-  
-  const TIERS = ["low", "medium", "high"];
-
-  
-  
-  
-  function pickTier() {
+  function environment() {
     const mm = (q) => window.matchMedia && matchMedia(q).matches;
-    const reduce = mm("(prefers-reduced-motion: reduce)");
-    let tier = 2;
-    if (reduce) tier = 0;
-    else if (mm("(pointer: coarse)")) tier = 1;
-    return { tier, reduce };
+    return {
+      reduce: mm("(prefers-reduced-motion: reduce)"),
+      coarse: mm("(pointer: coarse)"),
+    };
   }
 
   async function initWebGPU() {
@@ -619,10 +629,13 @@
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
 
-    const { tier, reduce } = pickTier();
+    const { reduce, coarse } = environment();
+    const maxScale = coarse ? CONFIG.maxCoarse : CONFIG.maxFine;
 
     
-    
+    let targetScale = reduce ? CONFIG.reduceScale : CONFIG.startScale;
+    let renderScale = targetScale;
+
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -631,7 +644,6 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      filter: reduce ? "blur(0px)" : `blur(${CONFIG.introBlur}px)`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -647,17 +659,12 @@
     const pipeline = device.createRenderPipeline({
       layout: "auto",
       vertex: { module: shaderModule, entryPoint: "vs_main" },
-      fragment: {
-        module: shaderModule,
-        entryPoint: "fs_main",
-        targets: [{ format }],
-      },
+      fragment: { module: shaderModule, entryPoint: "fs_main", targets: [{ format }] },
       primitive: { topology: "triangle-list" },
     });
 
     
     const uniformValues = new Float32Array(8);
-    uniformValues[6] = tier;
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -668,14 +675,8 @@
     });
 
     
-    let targetColorT = 0.0;   
-    let currentColorT = 0.0;
-
-    let spinInput = 0.5;      
-    let cameraPitch = 0.5;    
-    let cameraYaw = 0.0;
-
-    
+    let targetColorT = 0.0, currentColorT = 0.0;
+    let spinInput = 0.5, cameraPitch = 0.5, cameraYaw = 0.0;
     let pressX = 0, pressY = 0;
 
     const toggleColor = () => { targetColorT = targetColorT === 0.0 ? 1.0 : 0.0; };
@@ -683,7 +684,6 @@
     window.addEventListener("keydown", (e) => {
       if (e.key.toLowerCase() === "c") toggleColor();
     });
-
     window.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
     window.addEventListener("mouseup", (e) => {
       const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
@@ -699,15 +699,41 @@
     
     context.configure({ device, format, alphaMode: "premultiplied" });
 
+    
+    
+    
     function applySize() {
-      const scale = CONFIG.resolutionScale[TIERS[tier]];
-      const w = Math.max(1, Math.floor(window.innerWidth * scale));
-      const h = Math.max(1, Math.floor(window.innerHeight * scale));
+      const w = Math.max(1, Math.floor(window.innerWidth * renderScale));
+      const h = Math.max(1, Math.floor(window.innerHeight * renderScale));
       if (w === canvas.width && h === canvas.height) return;
       canvas.width = w;
       canvas.height = h;
       uniformValues[0] = w;
       uniformValues[1] = h;
+    }
+
+    
+    
+    
+    
+    
+    let lastBlur = -1;
+    function applyVisual() {
+      const t = (renderScale - CONFIG.minScale) /
+                Math.max(1e-4, (maxScale - CONFIG.minScale));
+      uniformValues[6] = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
+
+      if (reduce) {
+        if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
+        return;
+      }
+      
+      
+      const blur = CONFIG.maxBlur * (1 - Math.min(1, Math.max(0, t)));
+      if (Math.abs(blur - lastBlur) >= 0.3) {
+        canvas.style.filter = `blur(${blur.toFixed(2)}px)`;
+        lastBlur = blur;
+      }
     }
 
     
@@ -719,22 +745,51 @@
       const physW = Math.round(window.innerWidth * dpr);
       const physH = Math.round(window.innerHeight * dpr);
       if (Math.abs(physW - lastPhysW) <= 2 && Math.abs(physH - lastPhysH) <= 2) return;
-      lastPhysW = physW;
-      lastPhysH = physH;
+      lastPhysW = physW; lastPhysH = physH;
       applySize();
     }
     window.addEventListener("resize", onResize);
     onResize();
+    applyVisual();
+
+    
+    
+    
+    
+    
+    let frameMs = [];
+    function governor() {
+      if (frameMs.length < CONFIG.govWindow) return;
+      const avg = frameMs.reduce((a, b) => a + b, 0) / frameMs.length;
+      frameMs.length = 0;
+      if (reduce) return;
+
+      if (avg > CONFIG.slowMs) {
+        const over = avg / CONFIG.slowMs;                 
+        const step = CONFIG.downStep * Math.min(4, over); 
+        targetScale = Math.max(CONFIG.minScale, targetScale - step);
+      } else if (avg < CONFIG.fastMs) {
+        targetScale = Math.min(maxScale, targetScale + CONFIG.upStep);
+      }
+    }
 
     
     let lastTime = performance.now() / 1000;
-    let introStarted = false;
 
     function frame() {
       const time = performance.now() / 1000;
       
       const dt = Math.min(time - lastTime, 0.1);
       lastTime = time;
+
+      
+      frameMs.push(dt * 1000);
+      governor();
+
+      
+      renderScale += (targetScale - renderScale) * Math.min(1, CONFIG.scaleLerp * dt);
+      applySize();
+      applyVisual();
 
       
       let speed = spinInput * CONFIG.spinSpeed;
@@ -764,16 +819,6 @@
       pass.draw(3);
       pass.end();
       device.queue.submit([encoder.finish()]);
-
-      
-      if (!introStarted) {
-        introStarted = true;
-        if (!reduce) {
-          canvas.style.transition = `filter ${CONFIG.introMs}ms ease-out`;
-          void canvas.offsetWidth;           
-          canvas.style.filter = "blur(0px)";
-        }
-      }
 
       requestAnimationFrame(frame);
     }

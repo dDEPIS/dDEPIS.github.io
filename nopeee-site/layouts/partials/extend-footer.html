@@ -1,40 +1,50 @@
 <script type="module">
   // Background WebGPU piece. Renders a raymarched scene behind the page on a
   // handful of routes, and bows out quietly if WebGPU isn't available.
+  //
+  // Resolution is ADAPTIVE: it starts low and climbs only as far as the device
+  // can actually sustain ~60fps. If the GPU falls behind (a phone chugging on
+  // the raymarch), it drops back down. Nothing here guesses from device type —
+  // it measures real frame time and reacts.
 
   const CONFIG = {
-    // Only run on these routes.
     paths: ["/", "/about/", "/projects/", "/articles/"],
 
-    // Render resolution as a fraction of the window, per tier. 0.5 is the
-    // original half-res look; lower tiers are cheaper on weaker hardware.
-    resolutionScale: { low: 0.20, medium: 0.35, high: 0.50 },
+    // Adaptive resolution as a fraction of the window.
+    startScale:  0.22,  // everyone begins here, so the ramp-up is visible
+    minScale:    0.15,  // floor for weak hardware
+    maxCoarse:   0.42,  // ceiling for touch devices (phones / tablets)
+    maxFine:     0.55,  // ceiling for pointer devices (desktop)
+    reduceScale: 0.24,  // fixed scale when reduced motion is requested
 
-    // Camera feel.
-    spinSpeed: 0.6,   // yaw speed at full horizontal mouse travel
-    minSpin: 0.2,     // never quite stop, so it keeps drifting when idle
-    colorFade: 3.0,   // red <-> white crossfade speed
+    // Frame-time governor (target ~60fps => 16.7ms budget).
+    // slowMs must be a bit above the refresh interval, fastMs at/above it:
+    // on a vsync-locked 60Hz display frame time sits at ~16.7ms even with
+    // headroom, so we treat "not missing frames" as licence to creep upward.
+    slowMs:   19.0,     // avg above this => drop resolution (reacts fast)
+    fastMs:   17.0,     // avg below this => creep resolution up (probe headroom)
+    downStep: 0.040,    // base drop per decision (scaled up when badly over)
+    upStep:   0.006,    // rise per decision (gentle, so overshoot is rare/small)
+    govWindow: 20,      // frames averaged per governor decision (fps-agnostic)
+    scaleLerp: 4.0,     // how quickly on-screen resolution eases to the target
 
-    // Intro: the background comes up blurry and sharpens once. This is the
-    // visible "low to high" — a blur reads like resolution, eases smoothly on
-    // any device, and only runs at load.
-    introBlur: 10,    // px the intro starts from (higher = starts softer)
-    introMs: 1200,    // how long it takes to sharpen
+    // Upscale blur: a small canvas stretched to full screen looks soft, which
+    // conveniently reads as "still sharpening." Blur eases to 0 as resolution
+    // climbs — so low->high is now a REAL sharpen backed by pixels, not a fake.
+    maxBlur: 6.0,
+
+    // Camera / colour feel (unchanged).
+    spinSpeed: 0.6,
+    minSpin:   0.2,
+    colorFade: 3.0,
   };
 
-  // Shader reads this as uniforms.quality (0 / 1 / 2).
-  const TIERS = ["low", "medium", "high"];
-
-  // Pick a tier once, from the device — no frame-rate guessing, so it's the
-  // same every load. Reduced-motion stays low, touch devices medium, desktop
-  // high. Returns { tier, reduce }.
-  function pickTier() {
+  function environment() {
     const mm = (q) => window.matchMedia && matchMedia(q).matches;
-    const reduce = mm("(prefers-reduced-motion: reduce)");
-    let tier = 2;
-    if (reduce) tier = 0;
-    else if (mm("(pointer: coarse)")) tier = 1;
-    return { tier, reduce };
+    return {
+      reduce: mm("(prefers-reduced-motion: reduce)"),
+      coarse: mm("(pointer: coarse)"),
+    };
   }
 
   async function initWebGPU() {
@@ -45,10 +55,13 @@
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
 
-    const { tier, reduce } = pickTier();
+    const { reduce, coarse } = environment();
+    const maxScale = coarse ? CONFIG.maxCoarse : CONFIG.maxFine;
 
-    // Full-screen canvas pinned behind everything. Starts blurry and eases to
-    // sharp (unless the visitor asked for reduced motion).
+    // Adaptive state. Reduced motion => fixed scale, no ramp, no blur animation.
+    let targetScale = reduce ? CONFIG.reduceScale : CONFIG.startScale;
+    let renderScale = targetScale;
+
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -57,7 +70,6 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      filter: reduce ? "blur(0px)" : `blur(${CONFIG.introBlur}px)`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -76,17 +88,12 @@
     const pipeline = device.createRenderPipeline({
       layout: "auto",
       vertex: { module: shaderModule, entryPoint: "vs_main" },
-      fragment: {
-        module: shaderModule,
-        entryPoint: "fs_main",
-        targets: [{ format }],
-      },
+      fragment: { module: shaderModule, entryPoint: "fs_main", targets: [{ format }] },
       primitive: { topology: "triangle-list" },
     });
 
     // 8 floats / 32 bytes: [w, h, time, colorT, yaw, pitch, quality, pad].
     const uniformValues = new Float32Array(8);
-    uniformValues[6] = tier;
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -97,14 +104,8 @@
     });
 
     // --- interaction state -------------------------------------------------
-    let targetColorT = 0.0;   // 0 = red, 1 = white
-    let currentColorT = 0.0;
-
-    let spinInput = 0.5;      // -1..1 from horizontal mouse position
-    let cameraPitch = 0.5;    // -1..1 from vertical mouse position
-    let cameraYaw = 0.0;
-
-    // Only used to tell a click apart from a drag.
+    let targetColorT = 0.0, currentColorT = 0.0;
+    let spinInput = 0.5, cameraPitch = 0.5, cameraYaw = 0.0;
     let pressX = 0, pressY = 0;
 
     const toggleColor = () => { targetColorT = targetColorT === 0.0 ? 1.0 : 0.0; };
@@ -112,7 +113,6 @@
     window.addEventListener("keydown", (e) => {
       if (e.key.toLowerCase() === "c") toggleColor();
     });
-
     window.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
     window.addEventListener("mouseup", (e) => {
       const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
@@ -124,14 +124,16 @@
     });
 
     // --- sizing ------------------------------------------------------------
-    // Configure the swapchain once; resizing the canvas element afterwards is
-    // enough on its own — the next getCurrentTexture() adopts the new size.
+    // Configure the swapchain once; changing canvas.width/height afterwards is
+    // enough — the next getCurrentTexture() adopts the new size.
     context.configure({ device, format, alphaMode: "premultiplied" });
 
+    // Resize the backing store from the *current* renderScale. Early-returns
+    // when the integer dimensions are unchanged, so the slow ramp only triggers
+    // a real (re)allocation when it actually crosses a pixel boundary.
     function applySize() {
-      const scale = CONFIG.resolutionScale[TIERS[tier]];
-      const w = Math.max(1, Math.floor(window.innerWidth * scale));
-      const h = Math.max(1, Math.floor(window.innerHeight * scale));
+      const w = Math.max(1, Math.floor(window.innerWidth * renderScale));
+      const h = Math.max(1, Math.floor(window.innerHeight * renderScale));
       if (w === canvas.width && h === canvas.height) return;
       canvas.width = w;
       canvas.height = h;
@@ -139,31 +141,84 @@
       uniformValues[1] = h;
     }
 
+    // Drive quality (0/1/2) and blur from the ACTUAL resolution, so the shader
+    // and the on-screen softness track how hard we're currently pushing.
+    // NOTE: quality only helps if main.wgsl branches on it to cut raymarch
+    // steps at lower quality. If the shader ignores it, resolution is your only
+    // lever — see the notes I sent alongside this file.
+    let lastBlur = -1;
+    function applyVisual() {
+      const t = (renderScale - CONFIG.minScale) /
+                Math.max(1e-4, (maxScale - CONFIG.minScale));
+      uniformValues[6] = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
+
+      if (reduce) {
+        if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
+        return;
+      }
+      // More upscaling (lower renderScale) => more blur. Only write the style
+      // when it moves meaningfully, to avoid a paint every single frame.
+      const blur = CONFIG.maxBlur * (1 - Math.min(1, Math.max(0, t)));
+      if (Math.abs(blur - lastBlur) >= 0.3) {
+        canvas.style.filter = `blur(${blur.toFixed(2)}px)`;
+        lastBlur = blur;
+      }
+    }
+
     // Page zoom (Ctrl +/-) fires "resize" because CSS-pixel innerWidth changes
-    // even though the window's physical size hasn't. Track physical pixels and
-    // only rebuild when those move, so zooming leaves the resolution untouched.
+    // even though the physical size hasn't. Track physical pixels and only
+    // rebuild when those move, so zooming leaves the resolution untouched.
     let lastPhysW = 0, lastPhysH = 0;
     function onResize() {
       const dpr = window.devicePixelRatio || 1;
       const physW = Math.round(window.innerWidth * dpr);
       const physH = Math.round(window.innerHeight * dpr);
       if (Math.abs(physW - lastPhysW) <= 2 && Math.abs(physH - lastPhysH) <= 2) return;
-      lastPhysW = physW;
-      lastPhysH = physH;
+      lastPhysW = physW; lastPhysH = physH;
       applySize();
     }
     window.addEventListener("resize", onResize);
     onResize();
+    applyVisual();
+
+    // --- adaptive governor -------------------------------------------------
+    // Averages the last `govWindow` frames. Over budget -> drop (proportionally
+    // harder the further over we are). Comfortably under -> creep up to probe
+    // for headroom. Gating on a frame count (not a timer) keeps it responsive
+    // even when the device is running at 10fps.
+    let frameMs = [];
+    function governor() {
+      if (frameMs.length < CONFIG.govWindow) return;
+      const avg = frameMs.reduce((a, b) => a + b, 0) / frameMs.length;
+      frameMs.length = 0;
+      if (reduce) return;
+
+      if (avg > CONFIG.slowMs) {
+        const over = avg / CONFIG.slowMs;                 // >1
+        const step = CONFIG.downStep * Math.min(4, over); // bail out faster when badly over
+        targetScale = Math.max(CONFIG.minScale, targetScale - step);
+      } else if (avg < CONFIG.fastMs) {
+        targetScale = Math.min(maxScale, targetScale + CONFIG.upStep);
+      }
+    }
 
     // --- frame loop --------------------------------------------------------
     let lastTime = performance.now() / 1000;
-    let introStarted = false;
 
     function frame() {
       const time = performance.now() / 1000;
       // Clamp dt so a backgrounded tab doesn't fling the camera on return.
       const dt = Math.min(time - lastTime, 0.1);
       lastTime = time;
+
+      // Feed the governor. dt is clamped, so a tab-return blip can't run away.
+      frameMs.push(dt * 1000);
+      governor();
+
+      // Ease the actual resolution toward the target, then apply.
+      renderScale += (targetScale - renderScale) * Math.min(1, CONFIG.scaleLerp * dt);
+      applySize();
+      applyVisual();
 
       // Keep a little idle spin regardless of how gentle the mouse input is.
       let speed = spinInput * CONFIG.spinSpeed;
@@ -193,16 +248,6 @@
       pass.draw(3);
       pass.end();
       device.queue.submit([encoder.finish()]);
-
-      // Once the first frame is on screen, ease the intro blur off to sharp.
-      if (!introStarted) {
-        introStarted = true;
-        if (!reduce) {
-          canvas.style.transition = `filter ${CONFIG.introMs}ms ease-out`;
-          void canvas.offsetWidth;           // commit the starting blur first
-          canvas.style.filter = "blur(0px)";
-        }
-      }
 
       requestAnimationFrame(frame);
     }
