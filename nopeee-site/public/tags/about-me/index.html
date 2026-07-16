@@ -640,16 +640,12 @@
     
     
     
-    
-    upgradeFps: 55,     
-    minFps: 40,         
-    sampleFrames: 45,   
-    warmupFrames: 15,   
-
-    
-    
-    focusBlur: 6,       
-    focusMs: 600,       
+    upgradeFps: 55,          
+    minFps: 40,              
+    sampleFrames: 30,        
+    warmupFrames: 10,        
+    maxCalibrationMs: 4000,  
+    revealMs: 800,           
   };
 
   
@@ -674,6 +670,7 @@
     const device = await adapter.requestDevice();
 
     
+    
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -682,7 +679,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      filter: "blur(0px)",
+      opacity: "0", transition: `opacity ${CONFIG.revealMs}ms ease-out`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -718,9 +715,13 @@
     });
 
     
+    const startTime = performance.now() / 1000;
     let ceiling = pickCeiling();
     let tier = 0;             
     uniformValues[6] = tier;
+
+    let revealed = false;
+    let stableWindows = 0;    
 
     let targetColorT = 0.0;   
     let currentColorT = 0.0;
@@ -764,19 +765,6 @@
       canvas.height = h;
       uniformValues[0] = w;
       uniformValues[1] = h;
-    }
-
-    
-    
-    
-    function focusPulse(oldScale, newScale) {
-      const k = Math.min(CONFIG.focusBlur, Math.abs(oldScale - newScale) * 22);
-      if (k < 0.1) return;
-      canvas.style.transition = "none";
-      canvas.style.filter = `blur(${k}px)`;
-      void canvas.offsetWidth;                 
-      canvas.style.transition = `filter ${CONFIG.focusMs}ms ease-out`;
-      canvas.style.filter = "blur(0px)";
     }
 
     
@@ -839,30 +827,40 @@
       
       
       
-      if (warmup > 0) {
-        warmup--;
-      } else {
-        sampleCount++;
-        sampleTime += dt;
-        if (sampleCount >= CONFIG.sampleFrames) {
-          const fps = sampleCount / sampleTime;
-          const oldScale = CONFIG.resolutionScale[TIERS[tier]];
-          if (fps < CONFIG.minFps && tier > 0) {
-            tier--;
-            ceiling = tier;              
-            uniformValues[6] = tier;
-            applySize();
-            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
-            warmup = CONFIG.warmupFrames;
-          } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
-            tier++;
-            uniformValues[6] = tier;
-            applySize();
-            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
-            warmup = CONFIG.warmupFrames;
+      if (!revealed) {
+        if (warmup > 0) {
+          warmup--;
+        } else {
+          sampleCount++;
+          sampleTime += dt;
+          if (sampleCount >= CONFIG.sampleFrames) {
+            const fps = sampleCount / sampleTime;
+            let changed = false;
+            if (fps < CONFIG.minFps && tier > 0) {
+              tier--;
+              ceiling = tier;          
+              changed = true;
+            } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
+              tier++;
+              changed = true;
+            }
+            if (changed) {
+              uniformValues[6] = tier;
+              applySize();
+              warmup = CONFIG.warmupFrames;
+              stableWindows = 0;
+            } else {
+              stableWindows++;
+            }
+            sampleCount = 0;
+            sampleTime = 0;
           }
-          sampleCount = 0;
-          sampleTime = 0; 
+        } 
+
+        
+        if (stableWindows >= 1 || time - startTime > CONFIG.maxCalibrationMs / 1000) {
+          revealed = true;
+          canvas.style.opacity = "1";
         }
       }
 

@@ -17,20 +17,16 @@
     minSpin: 0.2,     // never quite stop, so it keeps drifting when idle
     colorFade: 3.0,   // red <-> white crossfade speed
 
-    // Adaptive quality. We start at the cheapest tier and only climb when the
-    // device shows headroom, so weak hardware never has to render an expensive
-    // tier just to find out it can't. To keep it from flip-flopping there's a
-    // dead band between the two thresholds, and once a tier proves too heavy we
-    // lower the ceiling so it's never attempted again.
-    upgradeFps: 55,     // climb a tier only with at least this much headroom
-    minFps: 40,         // drop a tier (and lock it out) below this
-    sampleFrames: 45,   // frames per measurement window
-    warmupFrames: 15,   // frames to ignore after any tier change
-
-    // A tier change swaps resolution instantly; we mask the swap with a short
-    // blur that eases back to sharp, so it reads as a focus-in instead of a pop.
-    focusBlur: 6,       // px of blur used to hide the biggest swaps
-    focusMs: 600,       // duration of the refocus
+    // Quality is calibrated ONCE, while the canvas is still invisible: start
+    // cheap, climb only when there's headroom, settle, then fade in at the
+    // chosen tier and leave it there. That way the viewer never sees the
+    // resolution stepping around — just one clean fade-in.
+    upgradeFps: 55,          // climb a tier only with at least this much headroom
+    minFps: 40,              // drop a tier (and lock it out) below this
+    sampleFrames: 30,        // frames per calibration window
+    warmupFrames: 10,        // frames to ignore after each tier change
+    maxCalibrationMs: 4000,  // reveal anyway if it hasn't settled by now
+    revealMs: 800,           // fade-in duration once calibrated
   };
 
   // Shader reads this as uniforms.quality (0 / 1 / 2).
@@ -54,7 +50,8 @@
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
 
-    // Full-screen canvas pinned behind everything.
+    // Full-screen canvas pinned behind everything. Starts invisible and fades
+    // in once quality has been calibrated.
     document.body.style.backgroundColor = "transparent";
     const canvas = document.createElement("canvas");
     canvas.id = "webgpu-bg";
@@ -63,7 +60,7 @@
       position: "fixed", top: "0", left: "0",
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
-      filter: "blur(0px)",
+      opacity: "0", transition: `opacity ${CONFIG.revealMs}ms ease-out`,
     });
 
     const context = canvas.getContext("webgpu");
@@ -102,9 +99,13 @@
     });
 
     // --- state -------------------------------------------------------------
+    const startTime = performance.now() / 1000;
     let ceiling = pickCeiling();
     let tier = 0;             // start cheap and climb toward the ceiling
     uniformValues[6] = tier;
+
+    let revealed = false;
+    let stableWindows = 0;    // consecutive calibration windows with no change
 
     let targetColorT = 0.0;   // 0 = red, 1 = white
     let currentColorT = 0.0;
@@ -148,19 +149,6 @@
       canvas.height = h;
       uniformValues[0] = w;
       uniformValues[1] = h;
-    }
-
-    // Hide a resolution swap under a quick refocus: jump to a blur sized to the
-    // swap, then let CSS ease it back to sharp. Bigger jumps blur more; steady
-    // state stays at blur(0) so there's no ongoing cost.
-    function focusPulse(oldScale, newScale) {
-      const k = Math.min(CONFIG.focusBlur, Math.abs(oldScale - newScale) * 22);
-      if (k < 0.1) return;
-      canvas.style.transition = "none";
-      canvas.style.filter = `blur(${k}px)`;
-      void canvas.offsetWidth;                 // commit the blur before easing
-      canvas.style.transition = `filter ${CONFIG.focusMs}ms ease-out`;
-      canvas.style.filter = "blur(0px)";
     }
 
     // Page zoom (Ctrl +/-) fires "resize" because CSS-pixel innerWidth changes
@@ -220,33 +208,43 @@
       pass.end();
       device.queue.submit([encoder.finish()]);
 
-      // Adapt quality. Ignore a few frames after any change, then measure a
-      // window: climb toward the ceiling when there's headroom, or fall back
-      // (and drop the ceiling) when the current tier is too heavy.
-      if (warmup > 0) {
-        warmup--;
-      } else {
-        sampleCount++;
-        sampleTime += dt;
-        if (sampleCount >= CONFIG.sampleFrames) {
-          const fps = sampleCount / sampleTime;
-          const oldScale = CONFIG.resolutionScale[TIERS[tier]];
-          if (fps < CONFIG.minFps && tier > 0) {
-            tier--;
-            ceiling = tier;              // this tier was too heavy; don't retry it
-            uniformValues[6] = tier;
-            applySize();
-            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
-            warmup = CONFIG.warmupFrames;
-          } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
-            tier++;
-            uniformValues[6] = tier;
-            applySize();
-            focusPulse(oldScale, CONFIG.resolutionScale[TIERS[tier]]);
-            warmup = CONFIG.warmupFrames;
+      // Calibrate quality while the canvas is still invisible: climb when there
+      // is headroom, drop (and lock the ceiling) when a tier is too heavy. Once
+      // the tier holds steady for a window, fade in and stop touching it.
+      if (!revealed) {
+        if (warmup > 0) {
+          warmup--;
+        } else {
+          sampleCount++;
+          sampleTime += dt;
+          if (sampleCount >= CONFIG.sampleFrames) {
+            const fps = sampleCount / sampleTime;
+            let changed = false;
+            if (fps < CONFIG.minFps && tier > 0) {
+              tier--;
+              ceiling = tier;          // too heavy; never try this tier again
+              changed = true;
+            } else if (fps > CONFIG.upgradeFps && tier < ceiling) {
+              tier++;
+              changed = true;
+            }
+            if (changed) {
+              uniformValues[6] = tier;
+              applySize();
+              warmup = CONFIG.warmupFrames;
+              stableWindows = 0;
+            } else {
+              stableWindows++;
+            }
+            sampleCount = 0;
+            sampleTime = 0;
           }
-          sampleCount = 0;
-          sampleTime = 0; 
+        } 
+
+        // Reveal once it's settled, or after a hard time cap as a fallback.
+        if (stableWindows >= 1 || time - startTime > CONFIG.maxCalibrationMs / 1000) {
+          revealed = true;
+          canvas.style.opacity = "1";
         }
       }
 
