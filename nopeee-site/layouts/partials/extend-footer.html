@@ -8,7 +8,7 @@
   // it measures real frame time and reacts.
 
   const CONFIG = {
-    paths: ["/", "/about/", "/projects/", "/articles/"],
+    paths: ["/", "/about/", "/projects/", "/articles/", "/digitalartwork/", "/digitalartwork/a-wild-in-the-rose/"],
 
     // Adaptive resolution as a fraction of the window.
     startScale:  0.22,  // everyone begins here, so the ramp-up is visible
@@ -21,7 +21,7 @@
     // slowMs must be a bit above the refresh interval, fastMs at/above it:
     // on a vsync-locked 60Hz display frame time sits at ~16.7ms even with
     // headroom, so we treat "not missing frames" as licence to creep upward.
-    slowMs:   19.0,     // avg above this => drop resolution (reacts fast)
+    slowMs:   25.0,     // avg above this => drop resolution (reacts fast)
     fastMs:   17.0,     // avg below this => creep resolution up (probe headroom)
     downStep: 0.040,    // base drop per decision (scaled up when badly over)
     upStep:   0.006,    // rise per decision (gentle, so overshoot is rare/small)
@@ -76,7 +76,7 @@
     const format = navigator.gpu.getPreferredCanvasFormat();
 
     // Shader source is inlined by Hugo from the assets folder at build time.
-    {{ $shader := resources.Get "shaders/main.wgsl" }}
+    {{ $shader := resources.Get "shaders/TheRose.wgsl" }}
     {{ with $shader }}
         const shaderCode = `{{ .Content }}`;
     {{ else }}

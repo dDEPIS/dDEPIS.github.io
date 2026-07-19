@@ -26,6 +26,11 @@
   pageRef = "Articles"
   weight = 10
 
+[[main]]
+  name = "Digital Artworks"
+  pageRef = "DigitalArtwork"
+  weight = 10
+
 #[[main]]
 #  name = "Parent"
 #  weight = 20

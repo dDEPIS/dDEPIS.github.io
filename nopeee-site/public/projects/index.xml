@@ -9,7 +9,17 @@
     <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
     <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
     <copyright>© 2026 DEPIS</copyright>
-    <lastBuildDate>Wed, 06 Aug 2025 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/projects/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Fri, 19 Jun 2026 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/projects/index.xml" rel="self" type="application/rss+xml" />
+    
+    <item>
+      <title>TheSynthesizer</title>
+      <link>http://localhost:1313/projects/thesynthesizer/</link>
+      <pubDate>Fri, 19 Jun 2026 00:00:00 +0000</pubDate>
+      <author>ddepis.d@gmail.com (DEPIS)</author>
+      <guid>http://localhost:1313/projects/thesynthesizer/</guid>
+      <description>A digital subtractive synthesizer I implemented. Can do a lot of cool stuff.</description>
+      
+    </item>
     
     <item>
       <title>UE Color Tools Plugin</title>
