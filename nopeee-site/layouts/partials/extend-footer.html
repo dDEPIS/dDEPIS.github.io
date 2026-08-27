@@ -71,9 +71,9 @@
   // 4. PRELOAD SHADER SOURCES VIA HUGO
   // Hugo injects the WGSL strings at build time. 
   const SHADER_SOURCES = {
-    "WildInTheRose": `{{ with resources.Get "shaders/A-Wild-In-The-Rose.wgsl" }}{{ .Content }}{{ end }}`,
+    "WildInTheRose": `{{ with resources.Get "shaders/TheRose.wgsl" }}{{ .Content }}{{ end }}`,
     "FearInoculum": `{{ with resources.Get "shaders/FearInoculum.wgsl" }}{{ .Content }}{{ end }}`,
-    "TheEyeYouSee": `{{ with resources.Get "shaders/The-Eye-You-See.wgsl" }}{{ .Content }}{{ end }}`
+    "TheEyeYouSee": `{{ with resources.Get "shaders/TheEye.wgsl" }}{{ .Content }}{{ end }}`
   };
 
   const GLOBAL_SETTINGS = {

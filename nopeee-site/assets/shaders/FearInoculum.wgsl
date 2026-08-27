@@ -14,9 +14,9 @@ struct Uniforms {
 // ---------------------------------------------------------------------------
 // Raymarch settings
 // ---------------------------------------------------------------------------
-const CAM_POS        = vec3f(-0.3, 0.15, -0.68);
+//const CAM_POS        = vec3f(-0.3, 0.15, -0.68);
 const CAM_LOOK_AT    = vec3f(-0.35, -0.2, 0.0);
-const CAM_FOV_ZOOM   = 1.7;
+//const CAM_FOV_ZOOM   = 1.7;
 
 const STEP_SCALE = 0.2;      
 const SURF_EPS   = 0.0002;
@@ -297,11 +297,25 @@ fn calc_ao(pos: vec3f, nor: vec3f) -> f32 {
 fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
     let uv_flipped = vec2f(uv.x, -uv.y);
 
-    let ro = CAM_POS;
+    // --- RESPONSIVE CAMERA LOGIC ---
+    let aspect = uniforms.resolution.x / uniforms.resolution.y;
+    
+    // Creates a blend factor: 0.0 for wide screens (desktop), 1.0 for tall screens (mobile)
+    let portrait_t = smoothstep(1.3, 0.6, aspect);
+    
+    // Blend between Desktop Camera and Mobile Camera positions
+    let desktop_ro = vec3f(-0.3, 0.15, -0.68);
+    let mobile_ro  = vec3f(-0.3, 0.47, -0.75); // Pulled further back and slightly up
+    let ro = mix(desktop_ro, mobile_ro, portrait_t);
+    
+    // Blend between Desktop FOV (1.7) and Mobile FOV (0.9 = wider)
+    let fov_zoom = mix(1.7, 0.9, portrait_t);
+    // -------------------------------
+
     let fwd = normalize(CAM_LOOK_AT - ro);
     let right = normalize(cross(vec3f(0.0, 1.0, 0.0), fwd));
     let up = cross(fwd, right);
-    let rd = normalize(fwd * CAM_FOV_ZOOM + right * uv_flipped.x + up * uv_flipped.y);
+    let rd = normalize(fwd * fov_zoom + right * uv_flipped.x + up * uv_flipped.y);
 
     var t = 0.0;
     var hit = false;
