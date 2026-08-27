@@ -1,65 +1,122 @@
 <script type="module">
-  // Background WebGPU piece. Renders a raymarched scene behind the page on a
-  // handful of routes, and bows out quietly if WebGPU isn't available.
-  //
-  // Resolution is ADAPTIVE: it starts low and climbs only as far as the device
-  // can actually sustain ~60fps. If the GPU falls behind (a phone chugging on
-  // the raymarch), it drops back down. Nothing here guesses from device type —
-  // it measures real frame time and reacts.
+  // 1. GLOBALS & INTERACTION STATE
+  // We store user inputs centrally so any shader can grab what it needs.
+  const inputState = {
+    colorT: 0.0,
+    targetColorT: 0.0,
+    spinInput: 0.5,
+    cameraPitch: 0.5,
+    cameraYaw: 0.0
+  };
 
-  const CONFIG = {
-    paths: ["/", "/about/", "/projects/", "/articles/", "/digitalartwork/", "/digitalartwork/a-wild-in-the-rose/"],
+  // 2. SHADER CONFIGURATIONS
+  // Define per-shader resolution scaling and how to pack their uniform buffers.
+  const SHADER_REGISTRY = {
+    "WildInTheRose": {
+      // Resolution scaling restored 
+      startScale: 0.22, minScale: 0.15, maxCoarse: 0.42, maxFine: 0.55, reduceScale: 0.24,
+      // The size of the Float32Array (8 floats = 32 bytes)
+      uniformCount: 8,
+      // Custom mapping function for this specific shader's struct
+      updateUniforms: (values, w, h, time, quality) => {
+        values[0] = w;
+        values[1] = h;
+        values[2] = time;
+        values[3] = inputState.colorT;
+        values[4] = inputState.cameraYaw;
+        values[5] = inputState.cameraPitch;
+        values[6] = quality;
+        values[7] = 0.0; // _pad
+      }
+    },
+    "FearInoculum": {
+      // Example: Maybe this one runs faster, so we push the resolution higher
+      startScale: 0.35, minScale: 0.2, maxCoarse: 0.5, maxFine: 0.7, reduceScale: 0.3,
+      uniformCount: 8,
+      updateUniforms: (values, w, h, time, quality) => {
+        values[0] = w;
+        values[1] = h;
+        values[2] = time;
+        values[3] = inputState.colorT;
+        values[4] = inputState.cameraYaw;
+        values[5] = inputState.cameraPitch;
+        values[6] = quality;
+        values[7] = 0.0;
+      }
+    },
+    "TheEyeYouSee": {
+      startScale: 0.22, minScale: 0.15, maxCoarse: 0.42, maxFine: 0.55, reduceScale: 0.24,
+      uniformCount: 8,
+      updateUniforms: (values, w, h, time, quality) => {
+        values[0] = w;
+        values[1] = h;
+        values[2] = time;
+        values[3] = inputState.colorT;
+        values[4] = inputState.cameraYaw;
+        values[5] = inputState.cameraPitch;
+        values[6] = quality;
+        values[7] = 0.0;
+      }
+    }
+  };
 
-    // Adaptive resolution as a fraction of the window.
-    startScale:  0.22,  // everyone begins here, so the ramp-up is visible
-    minScale:    0.15,  // floor for weak hardware
-    maxCoarse:   0.42,  // ceiling for touch devices (phones / tablets)
-    maxFine:     0.55,  // ceiling for pointer devices (desktop)
-    reduceScale: 0.24,  // fixed scale when reduced motion is requested
+  // 3. ROUTING
+  // Map your site's URLs to the registry keys above.
+  const ROUTE_MAP = {
+    "/digitalartwork/a-wild-in-the-rose/": "WildInTheRose",
+    "/digitalartwork/fearinoculum/": "FearInoculum",
+    "/digitalartwork/the-eye-you-see/": "TheEyeYouSee"
+  };
 
-    // Frame-time governor (target ~60fps => 16.7ms budget).
-    // slowMs must be a bit above the refresh interval, fastMs at/above it:
-    // on a vsync-locked 60Hz display frame time sits at ~16.7ms even with
-    // headroom, so we treat "not missing frames" as licence to creep upward.
-    slowMs:   25.0,     // avg above this => drop resolution (reacts fast)
-    fastMs:   17.0,     // avg below this => creep resolution up (probe headroom)
-    downStep: 0.040,    // base drop per decision (scaled up when badly over)
-    upStep:   0.006,    // rise per decision (gentle, so overshoot is rare/small)
-    govWindow: 20,      // frames averaged per governor decision (fps-agnostic)
-    scaleLerp: 4.0,     // how quickly on-screen resolution eases to the target
+  // 4. PRELOAD SHADER SOURCES VIA HUGO
+  // Hugo injects the WGSL strings at build time. 
+  const SHADER_SOURCES = {
+    "WildInTheRose": `{{ with resources.Get "shaders/A-Wild-In-The-Rose.wgsl" }}{{ .Content }}{{ end }}`,
+    "FearInoculum": `{{ with resources.Get "shaders/FearInoculum.wgsl" }}{{ .Content }}{{ end }}`,
+    "TheEyeYouSee": `{{ with resources.Get "shaders/The-Eye-You-See.wgsl" }}{{ .Content }}{{ end }}`
+  };
 
-    // Upscale blur: a small canvas stretched to full screen looks soft, which
-    // conveniently reads as "still sharpening." Blur eases to 0 as resolution
-    // climbs — so low->high is now a REAL sharpen backed by pixels, not a fake.
-    maxBlur: 6.0,
-
-    // Camera / colour feel (unchanged).
-    spinSpeed: 0.6,
-    minSpin:   0.2,
-    colorFade: 3.0,
+  const GLOBAL_SETTINGS = {
+    slowMs: 25.0, fastMs: 17.0, downStep: 0.040, upStep: 0.006, 
+    govWindow: 20, scaleLerp: 14.0, maxBlur: 1.0, 
+    spinSpeed: 0.6, minSpin: 0.2, colorFade: 3.0,
   };
 
   function environment() {
     const mm = (q) => window.matchMedia && matchMedia(q).matches;
-    return {
-      reduce: mm("(prefers-reduced-motion: reduce)"),
-      coarse: mm("(pointer: coarse)"),
-    };
+    return { reduce: mm("(prefers-reduced-motion: reduce)"), coarse: mm("(pointer: coarse)") };
   }
 
   async function initWebGPU() {
-    if (!CONFIG.paths.includes(window.location.pathname)) return;
     if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
+
+    // -- DETERMINE ACTIVE SHADER --
+    // Normalize path to ensure trailing slash matches the map
+    let currentPath = window.location.pathname.replace(/\/?$/, '/'); 
+    let activeKey = null;
+
+    if (currentPath === "/" || currentPath === "/index.html/") {
+      // Pick randomly on the home page
+      const keys = Object.keys(SHADER_REGISTRY);
+      activeKey = keys[Math.floor(Math.random() * keys.length)];
+    } else {
+      activeKey = ROUTE_MAP[currentPath];
+    }
+
+    // Bow out if the route doesn't have a mapped shader or the source didn't load
+    if (!activeKey || !SHADER_SOURCES[activeKey]) return; 
+
+    const activeConfig = SHADER_REGISTRY[activeKey];
+    const shaderCode = SHADER_SOURCES[activeKey];
 
     const adapter = await navigator.gpu.requestAdapter();
     if (!adapter) { console.log("No WebGPU adapter"); return; }
     const device = await adapter.requestDevice();
 
     const { reduce, coarse } = environment();
-    const maxScale = coarse ? CONFIG.maxCoarse : CONFIG.maxFine;
+    const maxScale = coarse ? activeConfig.maxCoarse : activeConfig.maxFine;
 
-    // Adaptive state. Reduced motion => fixed scale, no ramp, no blur animation.
-    let targetScale = reduce ? CONFIG.reduceScale : CONFIG.startScale;
+    let targetScale = reduce ? activeConfig.reduceScale : activeConfig.startScale;
     let renderScale = targetScale;
 
     document.body.style.backgroundColor = "transparent";
@@ -75,15 +132,6 @@
     const context = canvas.getContext("webgpu");
     const format = navigator.gpu.getPreferredCanvasFormat();
 
-    // Shader source is inlined by Hugo from the assets folder at build time.
-    {{ $shader := resources.Get "shaders/TheRose.wgsl" }}
-    {{ with $shader }}
-        const shaderCode = `{{ .Content }}`;
-    {{ else }}
-        console.error("CRITICAL ERROR: 'assets/shaders/main.wgsl' not found!");
-        return;
-    {{ end }}
-
     const shaderModule = device.createShaderModule({ code: shaderCode });
     const pipeline = device.createRenderPipeline({
       layout: "auto",
@@ -92,8 +140,8 @@
       primitive: { topology: "triangle-list" },
     });
 
-    // 8 floats / 32 bytes: [w, h, time, colorT, yaw, pitch, quality, pad].
-    const uniformValues = new Float32Array(8);
+    // Initialize the uniform buffer dynamically based on the config's uniformCount
+    const uniformValues = new Float32Array(activeConfig.uniformCount);
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
       usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
@@ -103,71 +151,51 @@
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
     });
 
-    // --- interaction state -------------------------------------------------
-    let targetColorT = 0.0, currentColorT = 0.0;
-    let spinInput = 0.5, cameraPitch = 0.5, cameraYaw = 0.0;
+    // --- interaction state listeners ---
     let pressX = 0, pressY = 0;
+    const toggleColor = () => { inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0; };
 
-    const toggleColor = () => { targetColorT = targetColorT === 0.0 ? 1.0 : 0.0; };
-
-    window.addEventListener("keydown", (e) => {
-      if (e.key.toLowerCase() === "c") toggleColor();
-    });
+    window.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "c") toggleColor(); });
     window.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
     window.addEventListener("mouseup", (e) => {
       const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
-      if (travel < 5) toggleColor(); // a click, not a drag
+      if (travel < 5) toggleColor(); 
     });
     window.addEventListener("mousemove", (e) => {
-      spinInput = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
-      cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+      inputState.spinInput = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
+      inputState.cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
     });
 
-    // --- sizing ------------------------------------------------------------
-    // Configure the swapchain once; changing canvas.width/height afterwards is
-    // enough — the next getCurrentTexture() adopts the new size.
+    // --- sizing ---
     context.configure({ device, format, alphaMode: "premultiplied" });
+    
+    // Quality tracking needs to remain outside so it can be passed to the uniform updater
+    let currentQuality = 0; 
+    let lastBlur = -1;
 
-    // Resize the backing store from the *current* renderScale. Early-returns
-    // when the integer dimensions are unchanged, so the slow ramp only triggers
-    // a real (re)allocation when it actually crosses a pixel boundary.
     function applySize() {
       const w = Math.max(1, Math.floor(window.innerWidth * renderScale));
       const h = Math.max(1, Math.floor(window.innerHeight * renderScale));
       if (w === canvas.width && h === canvas.height) return;
       canvas.width = w;
       canvas.height = h;
-      uniformValues[0] = w;
-      uniformValues[1] = h;
     }
 
-    // Drive quality (0/1/2) and blur from the ACTUAL resolution, so the shader
-    // and the on-screen softness track how hard we're currently pushing.
-    // NOTE: quality only helps if main.wgsl branches on it to cut raymarch
-    // steps at lower quality. If the shader ignores it, resolution is your only
-    // lever — see the notes I sent alongside this file.
-    let lastBlur = -1;
     function applyVisual() {
-      const t = (renderScale - CONFIG.minScale) /
-                Math.max(1e-4, (maxScale - CONFIG.minScale));
-      uniformValues[6] = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
+      const t = (renderScale - activeConfig.minScale) / Math.max(1e-4, (maxScale - activeConfig.minScale));
+      currentQuality = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
 
       if (reduce) {
         if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
         return;
       }
-      // More upscaling (lower renderScale) => more blur. Only write the style
-      // when it moves meaningfully, to avoid a paint every single frame.
-      const blur = CONFIG.maxBlur * (1 - Math.min(1, Math.max(0, t)));
+      const blur = GLOBAL_SETTINGS.maxBlur * (1 - Math.min(1, Math.max(0, t)));
       if (Math.abs(blur - lastBlur) >= 0.3) {
         canvas.style.filter = `blur(${blur.toFixed(2)}px)`;
         lastBlur = blur;
       }
     }
 
-    // Page zoom (Ctrl +/-) fires "resize" because CSS-pixel innerWidth changes
-    // even though the physical size hasn't. Track physical pixels and only
-    // rebuild when those move, so zooming leaves the resolution untouched.
     let lastPhysW = 0, lastPhysH = 0;
     function onResize() {
       const dpr = window.devicePixelRatio || 1;
@@ -181,57 +209,47 @@
     onResize();
     applyVisual();
 
-    // --- adaptive governor -------------------------------------------------
-    // Averages the last `govWindow` frames. Over budget -> drop (proportionally
-    // harder the further over we are). Comfortably under -> creep up to probe
-    // for headroom. Gating on a frame count (not a timer) keeps it responsive
-    // even when the device is running at 10fps.
+    // --- adaptive governor ---
     let frameMs = [];
     function governor() {
-      if (frameMs.length < CONFIG.govWindow) return;
+      if (frameMs.length < GLOBAL_SETTINGS.govWindow) return;
       const avg = frameMs.reduce((a, b) => a + b, 0) / frameMs.length;
       frameMs.length = 0;
       if (reduce) return;
 
-      if (avg > CONFIG.slowMs) {
-        const over = avg / CONFIG.slowMs;                 // >1
-        const step = CONFIG.downStep * Math.min(4, over); // bail out faster when badly over
-        targetScale = Math.max(CONFIG.minScale, targetScale - step);
-      } else if (avg < CONFIG.fastMs) {
-        targetScale = Math.min(maxScale, targetScale + CONFIG.upStep);
+      if (avg > GLOBAL_SETTINGS.slowMs) {
+        const over = avg / GLOBAL_SETTINGS.slowMs;
+        const step = GLOBAL_SETTINGS.downStep * Math.min(4, over);
+        targetScale = Math.max(activeConfig.minScale, targetScale - step);
+      } else if (avg < GLOBAL_SETTINGS.fastMs) {
+        targetScale = Math.min(maxScale, targetScale + GLOBAL_SETTINGS.upStep);
       }
     }
 
-    // --- frame loop --------------------------------------------------------
+    // --- frame loop ---
     let lastTime = performance.now() / 1000;
 
     function frame() {
       const time = performance.now() / 1000;
-      // Clamp dt so a backgrounded tab doesn't fling the camera on return.
       const dt = Math.min(time - lastTime, 0.1);
       lastTime = time;
 
-      // Feed the governor. dt is clamped, so a tab-return blip can't run away.
       frameMs.push(dt * 1000);
       governor();
 
-      // Ease the actual resolution toward the target, then apply.
-      renderScale += (targetScale - renderScale) * Math.min(1, CONFIG.scaleLerp * dt);
+      renderScale += (targetScale - renderScale) * Math.min(1, GLOBAL_SETTINGS.scaleLerp * dt);
       applySize();
       applyVisual();
 
-      // Keep a little idle spin regardless of how gentle the mouse input is.
-      let speed = spinInput * CONFIG.spinSpeed;
-      if (speed >= 0 && speed < CONFIG.minSpin) speed = CONFIG.minSpin;
-      else if (speed < 0 && speed > -CONFIG.minSpin) speed = -CONFIG.minSpin;
-      cameraYaw += speed * dt;
+      let speed = inputState.spinInput * GLOBAL_SETTINGS.spinSpeed;
+      if (speed >= 0 && speed < GLOBAL_SETTINGS.minSpin) speed = GLOBAL_SETTINGS.minSpin;
+      else if (speed < 0 && speed > -GLOBAL_SETTINGS.minSpin) speed = -GLOBAL_SETTINGS.minSpin;
+      inputState.cameraYaw += speed * dt;
 
-      currentColorT += (targetColorT - currentColorT) * CONFIG.colorFade * dt;
+      inputState.colorT += (inputState.targetColorT - inputState.colorT) * GLOBAL_SETTINGS.colorFade * dt;
 
-      uniformValues[2] = time;
-      uniformValues[3] = currentColorT;
-      uniformValues[4] = cameraYaw;
-      uniformValues[5] = cameraPitch;
+      // Delegate uniform population to the specific shader's configuration
+      activeConfig.updateUniforms(uniformValues, canvas.width, canvas.height, time, currentQuality);
       device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
 
       const encoder = device.createCommandEncoder();
@@ -255,14 +273,4 @@
   }
 
   initWebGPU();
-</script>
-
-<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
-<script>
-  kofiWidgetOverlay.draw('depis', {
-    'type': 'floating-chat',
-    'floating-chat.donateButton.text': 'Support me',
-    'floating-chat.donateButton.background-color': '#d9534f',
-    'floating-chat.donateButton.text-color': '#fff'
-  });
 </script>

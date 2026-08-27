@@ -1,7 +1,7 @@
 ---
-title: "A Wild In The Rose"
+title: "Fear Inoculum"
 
-summary: "And as the wild rose, the rose became wild. "
+summary: "Artwork insipred by Tool's Fear Inoculum album cover. I animated it and made it interactive. "
 categories: ["digitalartwork"]
 tags: ["digitalartwork"]
 #externalUrl: ""
