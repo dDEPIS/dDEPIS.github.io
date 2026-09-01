@@ -29,7 +29,7 @@
         values[7] = 0.0; // _pad
       }
     },
-    "FearInoculum": {
+    "Vaccine": {
       // Example: Maybe this one runs faster, so we push the resolution higher
       startScale: 0.35, minScale: 0.2, maxCoarse: 0.5, maxFine: 0.7, reduceScale: 0.3,
       uniformCount: 8,
@@ -64,7 +64,7 @@
   // Map your site's URLs to the registry keys above.
   const ROUTE_MAP = {
     "/digitalartwork/a-wild-in-the-rose/": "WildInTheRose",
-    "/digitalartwork/fearinoculum/": "FearInoculum",
+    "/digitalartwork/vaccine/": "Vaccine",
     "/digitalartwork/the-eye-you-see/": "TheEyeYouSee"
   };
 
@@ -72,7 +72,7 @@
   // Hugo injects the WGSL strings at build time. 
   const SHADER_SOURCES = {
     "WildInTheRose": `{{ with resources.Get "shaders/TheRose.wgsl" }}{{ .Content }}{{ end }}`,
-    "FearInoculum": `{{ with resources.Get "shaders/Fear -Inoculum.wgsl" }}{{ .Content }}{{ end }}`,
+    "Vaccine": `{{ with resources.Get "shaders/Vaccine.wgsl" }}{{ .Content }}{{ end }}`,
     "TheEyeYouSee": `{{ with resources.Get "shaders/TheEye.wgsl" }}{{ .Content }}{{ end }}`
   };
 

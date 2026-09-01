@@ -1,7 +1,7 @@
 ---
-title: "Fear Inoculum"
+title: "Vaccine"
 
-summary: "Artwork insipred by Tool's Fear Inoculum album cover. I animated it and made it interactive. "
+summary: "Develop a taste for the poison. "
 categories: ["digitalartwork"]
 tags: ["digitalartwork"]
 #externalUrl: ""
@@ -17,13 +17,5 @@ showRelatedContent: false
 
 
 <details>
-<summary>Controls: </summary>
 
-Mouse: 
-
-Movement -> Camera adjustment
-
-Click -> Color Shift
-
-</details>
 
