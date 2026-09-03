@@ -29,8 +29,7 @@
         values[7] = 0.0; // _pad
       }
     },
-    "Vaccine": {
-      // Example: Maybe this one runs faster, so we push the resolution higher
+   "Vaccine": {
       startScale: 0.35, minScale: 0.2, maxCoarse: 0.5, maxFine: 0.7, reduceScale: 0.3,
       uniformCount: 8,
       updateUniforms: (values, w, h, time, quality) => {
@@ -38,8 +37,8 @@
         values[1] = h;
         values[2] = time;
         values[3] = inputState.colorT;
-        values[4] = inputState.cameraYaw;
-        values[5] = inputState.cameraPitch;
+        values[4] = inputState.spinInput;   // <--- CHANGED THIS LINE
+        values[5] = inputState.cameraPitch; // (This is already the raw vertical mouse position)
         values[6] = quality;
         values[7] = 0.0;
       }
