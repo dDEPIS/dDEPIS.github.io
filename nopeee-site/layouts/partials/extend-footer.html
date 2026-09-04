@@ -1,6 +1,5 @@
 <script type="module">
   // 1. GLOBALS & INTERACTION STATE
-  // We store user inputs centrally so any shader can grab what it needs.
   const inputState = {
     colorT: 0.0,
     targetColorT: 0.0,
@@ -10,14 +9,10 @@
   };
 
   // 2. SHADER CONFIGURATIONS
-  // Define per-shader resolution scaling and how to pack their uniform buffers.
   const SHADER_REGISTRY = {
     "WildInTheRose": {
-      // Resolution scaling restored 
       startScale: 0.22, minScale: 0.15, maxCoarse: 0.42, maxFine: 0.55, reduceScale: 0.24,
-      // The size of the Float32Array (8 floats = 32 bytes)
       uniformCount: 8,
-      // Custom mapping function for this specific shader's struct
       updateUniforms: (values, w, h, time, quality) => {
         values[0] = w;
         values[1] = h;
@@ -26,10 +21,10 @@
         values[4] = inputState.cameraYaw;
         values[5] = inputState.cameraPitch;
         values[6] = quality;
-        values[7] = 0.0; // _pad
+        values[7] = 0.0; 
       }
     },
-   "Vaccine": {
+    "Vaccine": {
       startScale: 0.35, minScale: 0.2, maxCoarse: 0.5, maxFine: 0.7, reduceScale: 0.3,
       uniformCount: 8,
       updateUniforms: (values, w, h, time, quality) => {
@@ -37,8 +32,8 @@
         values[1] = h;
         values[2] = time;
         values[3] = inputState.colorT;
-        values[4] = inputState.spinInput;   // <--- CHANGED THIS LINE
-        values[5] = inputState.cameraPitch; // (This is already the raw vertical mouse position)
+        values[4] = inputState.spinInput;   
+        values[5] = inputState.cameraPitch; 
         values[6] = quality;
         values[7] = 0.0;
       }
@@ -60,7 +55,6 @@
   };
 
   // 3. ROUTING
-  // Map your site's URLs to the registry keys above.
   const ROUTE_MAP = {
     "/digitalartwork/a-wild-in-the-rose/": "WildInTheRose",
     "/digitalartwork/vaccine/": "Vaccine",
@@ -68,7 +62,6 @@
   };
 
   // 4. PRELOAD SHADER SOURCES VIA HUGO
-  // Hugo injects the WGSL strings at build time. 
   const SHADER_SOURCES = {
     "WildInTheRose": `{{ with resources.Get "shaders/TheRose.wgsl" }}{{ .Content }}{{ end }}`,
     "Vaccine": `{{ with resources.Get "shaders/Vaccine.wgsl" }}{{ .Content }}{{ end }}`,
@@ -89,20 +82,16 @@
   async function initWebGPU() {
     if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
 
-    // -- DETERMINE ACTIVE SHADER --
-    // Normalize path to ensure trailing slash matches the map
     let currentPath = window.location.pathname.replace(/\/?$/, '/'); 
     let activeKey = null;
 
     if (currentPath === "/" || currentPath === "/index.html/") {
-      // Pick randomly on the home page
       const keys = Object.keys(SHADER_REGISTRY);
       activeKey = keys[Math.floor(Math.random() * keys.length)];
     } else {
       activeKey = ROUTE_MAP[currentPath];
     }
 
-    // Bow out if the route doesn't have a mapped shader or the source didn't load
     if (!activeKey || !SHADER_SOURCES[activeKey]) return; 
 
     const activeConfig = SHADER_REGISTRY[activeKey];
@@ -139,7 +128,6 @@
       primitive: { topology: "triangle-list" },
     });
 
-    // Initialize the uniform buffer dynamically based on the config's uniformCount
     const uniformValues = new Float32Array(activeConfig.uniformCount);
     const uniformBuffer = device.createBuffer({
       size: uniformValues.byteLength,
@@ -150,25 +138,65 @@
       entries: [{ binding: 0, resource: { buffer: uniformBuffer } }],
     });
 
-    // --- interaction state listeners ---
+    // -----------------------------------------------------------------------
+    // --- INTERACTION STATE LISTENERS (UPDATED FOR MOBILE TILT & TAPS) ---
+    // -----------------------------------------------------------------------
     let pressX = 0, pressY = 0;
-    const toggleColor = () => { inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0; };
+    let usingTilt = false; 
 
+    const toggleColor = () => { inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0; };
     window.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "c") toggleColor(); });
-    window.addEventListener("mousedown", (e) => { pressX = e.clientX; pressY = e.clientY; });
-    window.addEventListener("mouseup", (e) => {
-      const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
-      if (travel < 5) toggleColor(); 
+
+    // 1. Unified Pointer Down (Captures Mouse Click & Screen Touch)
+    window.addEventListener("pointerdown", (e) => { 
+      pressX = e.clientX; 
+      pressY = e.clientY; 
     });
-    window.addEventListener("mousemove", (e) => {
+
+    // 2. Unified Pointer Up
+    window.addEventListener("pointerup", (e) => {
+      // Ask iOS for permission to read the gyroscope on the very first screen tap
+      if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
+        DeviceOrientationEvent.requestPermission()
+          .then(permissionState => {
+            if (permissionState === 'granted') {
+              window.addEventListener('deviceorientation', handleOrientation);
+            }
+          }).catch(console.error);
+      }
+
+      // Check if it was a quick tap/click instead of a long drag
+      const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
+      if (travel < 15) toggleColor(); 
+    });
+
+    // 3. Gyroscope Translation Logic
+    function handleOrientation(e) {
+      if (e.beta === null || e.gamma === null) return;
+      usingTilt = true; // Locks out the mouse-move logic so they don't fight
+
+      // Gamma = Left/Right tilt (-30 to 30 degrees maps to -1 to +1)
+      inputState.spinInput = Math.max(-1.0, Math.min(1.0, e.gamma / 30.0));
+      
+      // Beta = Forward/Back pitch. Assuming a comfortable holding angle is ~45 degrees.
+      // (15 to 75 degrees maps to -1 to +1)
+      inputState.cameraPitch = Math.max(-1.0, Math.min(1.0, (e.beta - 45.0) / 30.0));
+    }
+
+    // Android/Standard browsers will just start listening immediately
+    window.addEventListener("deviceorientation", handleOrientation);
+
+    // 4. Pointer Move (Only affects desktop/mouse users now)
+    window.addEventListener("pointermove", (e) => {
+      if (usingTilt) return; // Ignore the mouse if the phone's gyroscope is active
       inputState.spinInput = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
       inputState.cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
     });
+    // -----------------------------------------------------------------------
 
     // --- sizing ---
     context.configure({ device, format, alphaMode: "premultiplied" });
     
-    // Quality tracking needs to remain outside so it can be passed to the uniform updater
     let currentQuality = 0; 
     let lastBlur = -1;
 
@@ -247,7 +275,6 @@
 
       inputState.colorT += (inputState.targetColorT - inputState.colorT) * GLOBAL_SETTINGS.colorFade * dt;
 
-      // Delegate uniform population to the specific shader's configuration
       activeConfig.updateUniforms(uniformValues, canvas.width, canvas.height, time, currentQuality);
       device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
 

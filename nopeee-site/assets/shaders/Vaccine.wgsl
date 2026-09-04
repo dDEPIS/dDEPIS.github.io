@@ -19,7 +19,6 @@ const CAM_POS        = vec3f(0.0, 0.0, 0.0);
 // --- DYNAMIC CAMERA MACROS ---
 const CAM_LOOK_AT_BASE = vec3f(0.0001, -0.2, 0.0);
 const CAM_LOOK_AT_MOD    = 0.2; // How far the camera looks left/right on Z-axis
-const CAM_LOOK_AT_MOD_Y  = 0.25; // How much pitch raises the camera's gaze to see the big eye
 
 const CAM_FOV_BASE     = 1.7;  // Default zoom
 const CAM_FOV_MOD      = 0.15;  // How much the FOV zooms in/out on Y-axis
@@ -447,7 +446,7 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
     let fov_zoom = mix(dynamic_fov, 0.9, portrait_t); 
 
     // 2. Modulate Look-At based on Mouse X and Y
-    let dynamic_look_at = CAM_LOOK_AT_BASE + vec3f(0.01, 0.0, -uniforms.yaw * CAM_LOOK_AT_MOD);
+    let dynamic_look_at = CAM_LOOK_AT_BASE + vec3f(0.03, 0.0, -uniforms.yaw * CAM_LOOK_AT_MOD);
 
     let fwd = normalize(dynamic_look_at - ro);
     let right = normalize(cross(vec3f(0.0, 1.0, 0.0), fwd));
