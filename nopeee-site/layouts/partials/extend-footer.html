@@ -139,7 +139,16 @@
     });
 
     // -----------------------------------------------------------------------
-    // --- INTERACTION STATE LISTENERS (UPDATED FOR MOBILE TILT & TAPS) ---
+    // --- INPUT SENSITIVITY MATH ---
+    // -----------------------------------------------------------------------
+    // Curves linear input (-1.0 to 1.0) into an exponential curve.
+    // Higher power = flatter center and steeper edges. Power of 5 is a solid quintic curve.
+    function applySensitivityCurve(value, power = 5) {
+      return Math.sign(value) * Math.pow(Math.abs(value), power);
+    }
+
+    // -----------------------------------------------------------------------
+    // --- INTERACTION STATE LISTENERS (WITH NON-LINEAR CURVE) ---
     // -----------------------------------------------------------------------
     let pressX = 0, pressY = 0;
     let usingTilt = false; 
@@ -175,12 +184,13 @@
       if (e.beta === null || e.gamma === null) return;
       usingTilt = true; // Locks out the mouse-move logic so they don't fight
 
-      // Gamma = Left/Right tilt (-30 to 30 degrees maps to -1 to +1)
-      inputState.spinInput = Math.max(-1.0, Math.min(1.0, e.gamma / 30.0));
-      
-      // Beta = Forward/Back pitch. Assuming a comfortable holding angle is ~45 degrees.
-      // (15 to 75 degrees maps to -1 to +1)
-      inputState.cameraPitch = Math.max(-1.0, Math.min(1.0, (e.beta - 45.0) / 30.0));
+      // Get raw linear values
+      let rawYaw = Math.max(-1.0, Math.min(1.0, e.gamma / 30.0));
+      let rawPitch = Math.max(-1.0, Math.min(1.0, (e.beta - 45.0) / 30.0));
+
+      // Apply the exponential curve
+      inputState.spinInput = applySensitivityCurve(rawYaw, 3);
+      inputState.cameraPitch = applySensitivityCurve(rawPitch, 3);
     }
 
     // Android/Standard browsers will just start listening immediately
@@ -189,8 +199,14 @@
     // 4. Pointer Move (Only affects desktop/mouse users now)
     window.addEventListener("pointermove", (e) => {
       if (usingTilt) return; // Ignore the mouse if the phone's gyroscope is active
-      inputState.spinInput = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
-      inputState.cameraPitch = (e.clientY / window.innerHeight) * 2.0 - 1.0;
+      
+      // Get raw linear values
+      let rawYaw = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
+      let rawPitch = Math.max(-1.0, Math.min(1.0, (e.clientY / window.innerHeight) * 2.0 - 1.0));
+
+      // Apply the exponential curve
+      inputState.spinInput = applySensitivityCurve(rawYaw, 3);
+      inputState.cameraPitch = applySensitivityCurve(rawPitch, 3);
     });
     // -----------------------------------------------------------------------
 
@@ -299,4 +315,14 @@
   }
 
   initWebGPU();
+</script>
+
+<script src='https://storage.ko-fi.com/cdn/scripts/overlay-widget.js'></script>
+<script>
+  kofiWidgetOverlay.draw('depis', {
+    'type': 'floating-chat',
+    'floating-chat.donateButton.text': 'Support me',
+    'floating-chat.donateButton.background-color': '#d9534f',
+    'floating-chat.donateButton.text-color': '#fff'
+  });
 </script>

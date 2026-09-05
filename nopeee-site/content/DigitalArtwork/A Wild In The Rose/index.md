@@ -1,7 +1,7 @@
 ---
 title: "A Wild In The Rose"
 
-summary: "And as the wild rose, the rose became wild. "
+summary: "And as the wild rose, the rose turned wild. "
 categories: ["digitalartwork"]
 tags: ["digitalartwork"]
 #externalUrl: ""
