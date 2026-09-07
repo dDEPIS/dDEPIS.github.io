@@ -67,7 +67,7 @@ const EYE_LOOK_PITCH = -0.15;
 const EYE_COLS      = 48.0;  
 const EYE_ROWS      = 23.7;  
 
-const EYE_SPACING   = 0.95;  
+const EYE_SPACING   = 0.85;  
 
 const EYE_RADIUS    = 0.045;  
 const EYE_HEIGHT    = 0.03;  
@@ -75,49 +75,61 @@ const EYE_HEIGHT    = 0.03;
 // ---------------------------------------------------------------------------
 // MACROS: Upper & Lower Disks
 // ---------------------------------------------------------------------------
-const UP_DISK_RADIUS     = 0.095; 
+const UP_DISK_RADIUS     = 0.09; 
 const UP_DISK_THICKNESS  = 0.0001; 
 const UP_DISK_POS_Y      = 0.04;   
-const UP_DISK_POS_Z      = -0.02;  
+const UP_DISK_POS_Z      = -0.01;  
 const UP_DISK_SCALE_Z    = 0.25;    
-const UP_DISK_FOLD_AMT   = -4.5;  
-const UP_DISK_TILT       = -0.6;    
+const UP_DISK_FOLD_AMT   = -5.5;  
+const UP_DISK_TILT       = -0.7;    
 
-const DN_DISK_RADIUS     = 0.095; 
+const DN_DISK_RADIUS     = 0.09; 
 const DN_DISK_THICKNESS  = 0.0001; 
 const DN_DISK_POS_Y      = -0.049;  
-const DN_DISK_POS_Z      = -0.014;  
+const DN_DISK_POS_Z      = -0.01;  
 const DN_DISK_SCALE_Z    = 0.35;    
-const DN_DISK_FOLD_AMT   =  7.0;   
-const DN_DISK_TILT       =  0.6;    
+const DN_DISK_FOLD_AMT   = 8.0;   
+const DN_DISK_TILT       =  0.7;    
 
 // ---------------------------------------------------------------------------
 // MACROS: Eyelids & Eyelashes
 // ---------------------------------------------------------------------------
 const EYELID_WRINKLE_FREQ  = 180.0;                
-const EYELID_WRINKLE_DEPTH = 0.0025;               
+const EYELID_WRINKLE_DEPTH = 0.003;               
 
-const EYELASH_COUNT        = 1.0;                 
-const EYELASH_LENGTH       = 0.095;                
+const ENABLE_EYELASHES     = false;                 
+const EYELASH_COUNT        = 20.0;                 
+const EYELASH_LENGTH       = 0.035;                
 const EYELASH_THICKNESS    = 0.0001;               
-const EYELASH_PROTRUSION   = -0.056;                // Pushes root radially outward from the skin
-const EYELASH_CURL         = 0.05;                 // Angles them further away from the eyeball
+const EYELASH_PROTRUSION   = 0.005;                
+const EYELASH_CURL         = 0.65;                 
 const EYELASH_COLOR        = vec3f(0.05, 0.05, 0.05); 
+// ---------------------------------------------------------------------------
+
+// ---------------------------------------------------------------------------
+// MACROS: Caruncle (Inner/Outer Pink Eye Corners)
+// ---------------------------------------------------------------------------
+const ENABLE_CARUNCLE    = true;
+const CARUNCLE_RADIUS    = 0.019;                  
+const CARUNCLE_OFFSET_X  = 0.055;                  
+const CARUNCLE_OFFSET_Y  = 0.0;                    
+const CARUNCLE_OFFSET_Z  = -0.012;                 
+const COLOR_CARUNCLE     = vec3f(0.95, 0.45, 0.5); 
 // ---------------------------------------------------------------------------
 
 
 // ---------------------------------------------------------------------------
 // Lighting & Palette
 // ---------------------------------------------------------------------------
-const LIGHT_POS   = vec3f(0.0, -1.2, 0.0);
-const LIGHT_COLOR = vec3f(0.7, 0.25, 0.25); 
+const LIGHT_POS   = vec3f(0.0,-0.8, 0.0); 
+const LIGHT_COLOR = vec3f(0.7, 0.7, 0.7); 
 const LIGHT_POWER = 5.7; 
-const AMBIENT_COLOR = vec3f(1.0, 1.0, 0.5); 
+const AMBIENT_COLOR = vec3f(1.0, 1.0, 1.0); 
 
 // --- LOWER MOVING LIGHT MACROS ---
 const LIGHT2_BASE_POS   = vec3f(0.0, -10.8, 0.0);   
 const LIGHT2_COLOR      = vec3f(0.7, 0.15, 0.15);  
-const LIGHT2_POWER      = 8.5;                     
+const LIGHT2_POWER      = 0.0;                    
 const LIGHT2_MOVE_SPEED = 0.6;                     
 const LIGHT2_MOVE_AMP   = 8.3;                     
 const LIGHT2_ATTEN_LIN  = 0.3;                     
@@ -125,9 +137,33 @@ const LIGHT2_ATTEN_QUAD = 1.5;
 // --------------------------------- 
 
 // --- BASE SURFACE MACROS ---
-const COLOR_SPIRAL     = vec3f(1.0, 0.87, 0.81); 
-const COLOR_EYELID     = vec3f(1.0, 0.87, 0.81);   
+const COLOR_SPIRAL          = vec3f(1.0, 0.77, 0.71); 
+const COLOR_EYELID          = vec3f(0.785, 0.531, 0.48);   
+const COLOR_EYELID_EDGE     = vec3f(0.5, 0.25, 0.2)*0.8; // Fades into this raw/darker tone at the rim
+const EYELID_EDGE_THICKNESS = 0.8;                  // 0.0 to 1.0 (How far the dark edge reaches inward)
 // ---------------------------------
+
+// --- 3D BULGING VEINS (Between Eyes) ---
+const ENABLE_3D_VEINS        = true;
+const VEIN_3D_WIDTH          = 0.008;                  // How wide the veins spread across the wall
+const VEIN_3D_HEIGHT         = 0.009;                  // How far they physically bulge outward
+const VEIN_3D_CHAOS          = 0.999;                  // 0.0 = full grid, 1.0 = highly broken up and sparse
+const VEIN_3D_WIGGLE         = 0.03;                   // How much they snake around the eyes
+const COLOR_3D_VEIN          = vec3f(0.4, 0.1, 0.1);   // Base dark gross blood color//vec3f(0.4, 0.3, 0.8);  
+const COLOR_3D_VEIN_PUMP     = vec3f(0.0, 0.0, 0.0);   // Bright oxygenated pulse color
+const VEIN_3D_PUMP_SPEED     = 2.0;                    // Speed of the pulse wave
+// ---------------------------------------
+
+// --- 2D FLAT SPIRAL VEINS (Background texture) ---
+const ENABLE_SPIRAL_VEINS   = false;
+const SPIRAL_VEIN_COLOR      = vec3f(0.4, 0.05, 0.05); 
+const SPIRAL_VEIN_PUMP_COLOR = vec3f(0.9, 0.2, 0.2);   
+const SPIRAL_VEIN_DENSITY    = 2.0;                    
+const SPIRAL_VEIN_THICKNESS  = 0.55;                   
+const SPIRAL_VEIN_BRANCHING  = 1.8;                    
+const SPIRAL_VEIN_PUMP_SPEED = 6.0;                    
+const SPIRAL_VEIN_PUMP_AMP   = 0.20;                   
+// ---------------------------------------
 
 // --- SCLERA & VEIN MACROS ---
 const COLOR_SCLERA     = vec3f(0.85, 0.85, 0.55);  
@@ -171,7 +207,12 @@ struct MapResult {
     is_big_eye: f32,
     iris_angle: f32,
     eye_uv: vec2f,      
-    is_lash: f32,       
+    is_lash: f32,
+    is_caruncle: f32,
+    spiral_uv: vec2f,
+    is_3d_vein: f32,    
+    vein_pump: f32,     
+    lid_edge_val: f32,  // Exposes how close the hit is to the rim of the eyelid
 }
 
 @vertex
@@ -184,6 +225,12 @@ fn vs_main(@builtin(vertex_index) in_vertex_index: u32) -> @builtin(position) ve
   return vec4f(pos[in_vertex_index], 0.0, 1.0);
 }
 
+// Polynomial smooth minimum
+fn smin(a: f32, b: f32, k: f32) -> f32 {
+    let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
+    return mix(b, a, h) - k * h * (1.0 - h);
+}
+
 // 2D Hash function
 fn hash21(p: vec2f) -> f32 {
     var p3 = fract(vec3f(p.xyx) * 0.1031);
@@ -191,7 +238,7 @@ fn hash21(p: vec2f) -> f32 {
     return fract((p3.x + p3.y) * p3.z);
 }
 
-// 2D Value Noise for Veins
+// 2D Value Noise
 fn noise2D(p: vec2f) -> f32 {
     let i = floor(p);
     let f = fract(p);
@@ -203,7 +250,7 @@ fn noise2D(p: vec2f) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
-// Ridged Multifractal to generate blood vessels
+// Ridged Multifractal to generate blood vessels for Sclera
 fn get_veins(uv: vec2f) -> f32 {
     var p = uv * VEIN_DENSITY;
     var f = 0.0;
@@ -222,6 +269,33 @@ fn get_veins(uv: vec2f) -> f32 {
     
     let thick = mix(0.95, 0.6, clamp(VEIN_THICKNESS, 0.0, 1.0));
     return smoothstep(thick - 0.05, thick + 0.05, f);
+}
+
+// Generates pumping, dilating veins for the main Spiral Background
+fn get_spiral_veins(uv: vec2f, time: f32) -> vec2f {
+    var p = uv * SPIRAL_VEIN_DENSITY;
+    var f = 0.0;
+    var amp = 1.0;
+    var sum = 0.0;
+    
+    for(var i: i32 = 0; i < 3; i++) {
+        p += vec2f(noise2D(p.yx * 1.5), noise2D(p.xy * 1.3)) * SPIRAL_VEIN_BRANCHING;
+        let n = noise2D(p);
+        f += (1.0 - abs(n - 0.5) * 2.0) * amp; 
+        sum += amp;
+        amp *= 0.5;
+        p *= 2.0;
+    }
+    f /= sum;
+    
+    let pump_wave = sin(uv.y * 12.0 - time * SPIRAL_VEIN_PUMP_SPEED);
+    let pump_mask = max(0.0, pump_wave);
+    let pump_bulge = pump_mask * SPIRAL_VEIN_PUMP_AMP;
+    
+    let thick = mix(0.95, 0.6, clamp(SPIRAL_VEIN_THICKNESS + pump_bulge, 0.0, 1.0));
+    let vein_mask = smoothstep(thick - 0.05, thick + 0.05, f);
+    
+    return vec2f(vein_mask, pump_mask * vein_mask);
 }
 
 fn get_chaotic_eye_dart(cell_id: vec2f, time: f32) -> vec2f {
@@ -297,7 +371,7 @@ fn map(p_in: vec3f) -> MapResult {
     let r_xz = length(p.xz);
     let dist_to_tube_core = length(vec2f(r_xz - COIL_RADIUS, p_y_local));
     let unwrapped_angle = (p.y - p_y_local) / (pitch_scaled * SPIRAL_DIR);
-    var u = (unwrapped_angle / 6.2831853) * (EYE_COLS);
+    var u = (unwrapped_angle / 6.2831853) * (EYE_COLS +sin(uniforms.time ) * PATTERN_SPEED);
     
     u -= uniforms.time * PATTERN_SPEED;
     let angle_minor = atan2(p_y_local, r_xz - COIL_RADIUS);
@@ -306,6 +380,7 @@ fn map(p_in: vec3f) -> MapResult {
     let v = (angle_minor / 6.2831853 + 0.5) * v_repeat;
     
     var uv = vec2f(u, v);
+    let spiral_uv = uv; // Store for 2D background veins
     
     let m_A = 33.0 / 46.0;
     let m_B = -32.0 / 46.0;
@@ -332,33 +407,74 @@ fn map(p_in: vec3f) -> MapResult {
     
     let path_len = length(vec2f(6.2831853 * COIL_RADIUS, COIL_PITCH));
     let tube_circ = 6.2831853 * TUBE_THICKNESS;
-    let phys_cell_u = path_len / (EYE_COLS);
+    let phys_cell_u = path_len / (EYE_COLS +sin(uniforms.time ) * PATTERN_SPEED);
     let phys_cell_v = tube_circ / (EYE_ROWS * 2.0);
 
     let p_local_xy = vec2f(p_unrot.x * phys_cell_u, p_unrot.y * phys_cell_v);
     let local_z = dist_to_tube_core - TUBE_THICKNESS; 
-    
     let p_local = vec3f(p_local_xy, local_z);
     
-    // 2. COMPOSE 3D GEOMETRY
+    // ---------------------------------------------------
+    // 1. BASE WALL & 3D BULGING VEINS
+    // ---------------------------------------------------
     var d_final = local_z; 
+    var is_3d_vein = 0.0;
+    var vein_pump_val = 0.0;
+
+    if (ENABLE_3D_VEINS) {
+        let wiggle = vec2f(
+            sin(p_local.y * 30.0 + uniforms.time * 2.0),
+            cos(p_local.x * 30.0 + uniforms.time * 2.1)
+        ) * VEIN_3D_WIGGLE;
+        
+        let v_domain = p_domain + wiggle;
+        let dist_x = abs(abs(v_domain.x) - 0.5) * phys_cell_u;
+        let dist_y = abs(abs(v_domain.y) - 0.5) * phys_cell_v;
+        
+        let hash_x = hash21(cell_id + vec2f(sign(v_domain.x) * 0.5, 0.0));
+        let hash_y = hash21(cell_id + vec2f(0.0, sign(v_domain.y) * 0.5));
+        
+        let n_x = noise2D(uv_rot * 3.0);
+        let n_y = noise2D(uv_rot * 3.0 + 17.0);
+        
+        let active_x = smoothstep(VEIN_3D_CHAOS - 0.2, VEIN_3D_CHAOS + 0.2, hash_x + n_x * 0.5);
+        let active_y = smoothstep(VEIN_3D_CHAOS - 0.2, VEIN_3D_CHAOS + 0.2, hash_y + n_y * 0.5);
+        
+        let pump = max(0.0, sin(uv_rot.y * 8.0 - uniforms.time * VEIN_3D_PUMP_SPEED));
+        vein_pump_val = pump;
+        
+        let r_x = mix(-0.02, VEIN_3D_WIDTH + pump * 0.008, active_x);
+        let r_y = mix(-0.02, VEIN_3D_WIDTH + pump * 0.008, active_y);
+        
+        // Aspect ratio squashes the tubes down so they bulge without floating off the surface
+        let height_ratio = VEIN_3D_WIDTH / max(VEIN_3D_HEIGHT, 0.0001);
+        
+        let d_tube_x = (length(vec2f(dist_x, local_z * height_ratio)) - r_x) / max(1.0, height_ratio);
+        let d_tube_y = (length(vec2f(dist_y, local_z * height_ratio)) - r_y) / max(1.0, height_ratio);
+        
+        let d_vein_3d = smin(d_tube_x, d_tube_y, 0.005);
+        
+        is_3d_vein = smoothstep(0.01, 0.0, d_vein_3d - local_z);
+        d_final = smin(d_final, d_vein_3d, 0.015);
+    }
+    
+    // Initialization for upper layers
     var is_eye = 0.0;
     var is_disk = 0.0;
     var is_big_eye = 0.0;
     var is_lash = 0.0;
+    var is_caruncle = 0.0;
+    var lid_edge_val = 0.0;
     var iris_angle = 0.0;
     var eye_uv = vec2f(0.0);
 
     // ---------------------------------------------------
-    // GIANT OVERSEER EYE
+    // 2. GIANT OVERSEER EYE
     // ---------------------------------------------------
     let d_big_eye = length(p_in - BIG_EYE_POS) - BIG_EYE_RADIUS;
     if (d_big_eye < d_final) {
         d_final = d_big_eye;
-        is_eye = 1.0;
-        is_disk = 0.0;
-        is_lash = 0.0;
-        is_big_eye = 1.0;
+        is_eye = 1.0; is_disk = 0.0; is_lash = 0.0; is_big_eye = 1.0; is_caruncle = 0.0; is_3d_vein = 0.0; lid_edge_val = 0.0;
     }
     
     let big_blink = get_chaotic_blink(vec2f(88.8, 77.7), uniforms.time);
@@ -368,14 +484,14 @@ fn map(p_in: vec3f) -> MapResult {
     
     if (d_lids_intersect < d_final && length(p_in - BIG_EYE_POS) < BIG_EYE_RADIUS + 0.1) {
         d_final = d_lids_intersect;
-        is_eye = 0.0;
-        is_disk = 1.0; 
-        is_lash = 0.0;
-        is_big_eye = 0.0; 
+        is_eye = 0.0; is_disk = 1.0; is_lash = 0.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0;
+        
+        let edge_dist = abs(abs(p_in.y - BIG_EYE_POS.y) - lid_aperture);
+        lid_edge_val = clamp(1.0 - edge_dist * 20.0, 0.0, 1.0);
     }
 
     // ---------------------------------------------------
-    // Normal Spiral Eyeball
+    // 3. NORMAL SPIRAL EYEBALL
     // ---------------------------------------------------
     var p_ball = p_local;
     let height_ratio = EYE_HEIGHT / EYE_RADIUS;
@@ -384,17 +500,28 @@ fn map(p_in: vec3f) -> MapResult {
     
     if (d_ball < d_final) {
         d_final = d_ball;
-        is_eye = 1.0;
-        is_disk = 0.0;
-        is_lash = 0.0;
-        is_big_eye = 0.0;
+        is_eye = 1.0; is_disk = 0.0; is_lash = 0.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0; lid_edge_val = 0.0;
     }
     
+    // ---------------------------------------------------
+    // 4. CARUNCLE (Inner/Outer Pink Corners)
+    // ---------------------------------------------------
+    if (ENABLE_CARUNCLE) {
+        let c_pos1 = p_local - vec3f(CARUNCLE_OFFSET_X, CARUNCLE_OFFSET_Y, CARUNCLE_OFFSET_Z);
+        let c_pos2 = p_local - vec3f(-CARUNCLE_OFFSET_X, CARUNCLE_OFFSET_Y, CARUNCLE_OFFSET_Z);
+        let d_car = min(length(c_pos1), length(c_pos2)) - CARUNCLE_RADIUS;
+        
+        if (d_car < d_final) {
+            d_final = d_car;
+            is_eye = 0.0; is_disk = 0.0; is_lash = 0.0; is_big_eye = 0.0; is_caruncle = 1.0; is_3d_vein = 0.0; lid_edge_val = 0.0;
+        }
+    }
+
     let blink_val = get_chaotic_blink(cell_id, uniforms.time);
     let lash_angle_step = 6.2831853 / EYELASH_COUNT;
 
     // ---------------------------------------------------
-    // Upper Eyelid & Eyelashes
+    // 5. UPPER EYELID & EYELASHES
     // ---------------------------------------------------
     var p_up = p_local;
     let up_tilt = mix(UP_DISK_TILT, -1.2, blink_val);
@@ -415,39 +542,39 @@ fn map(p_in: vec3f) -> MapResult {
     let d_up_raw = vec2f(up_r - UP_DISK_RADIUS, abs(q_up.y + up_wrinkle) - UP_DISK_THICKNESS);
     let d_up_disk = (min(max(d_up_raw.x, d_up_raw.y), 0.0) + length(max(d_up_raw, vec2f(0.0)))) * min(1.0, UP_DISK_SCALE_Z);
     
-    // Eyelashes
-    let up_a = atan2(q_up.z, q_up.x);
-    let up_sector = round(up_a / lash_angle_step);
-    let up_new_a = up_a - up_sector * lash_angle_step;
-    
-    let up_q_xz = vec2f(cos(up_new_a), sin(up_new_a)) * up_r;
-    
-    // Apply EYELASH_PROTRUSION to shift the root outward
-    let p_up_lash = vec3f(up_q_xz.x - UP_DISK_RADIUS + EYELASH_PROTRUSION, q_up.y - (EYELASH_PROTRUSION * 0.5), up_q_xz.y);
-    
-    let up_lash_hash = hash21(vec2f(up_sector, cell_id.x));
-    let up_lash_len = EYELASH_LENGTH * (0.5 + 0.5 * up_lash_hash);
-    let up_lash_bend = (up_lash_hash - 0.5) * 2.0;
-    
-    // Apply EYELASH_CURL to angle them out
-    let up_lash_ba = vec3f(-up_lash_len, -up_lash_len * (EYELASH_CURL + 0.3 * up_lash_bend), up_lash_bend * 0.02);
-    let up_lash_h = clamp(dot(p_up_lash, up_lash_ba) / dot(up_lash_ba, up_lash_ba), 0.0, 1.0);
-    let d_up_lash = (length(p_up_lash - up_lash_ba * up_lash_h) - EYELASH_THICKNESS * (1.0 - up_lash_h * 0.8)) * min(1.0, UP_DISK_SCALE_Z);
+    var d_up_lash = 100.0;
+    if (ENABLE_EYELASHES) {
+        let up_a = atan2(q_up.z, q_up.x);
+        let up_sector = round(up_a / lash_angle_step);
+        let up_new_a = up_a - up_sector * lash_angle_step;
+        
+        let up_q_xz = vec2f(cos(up_new_a), sin(up_new_a)) * up_r;
+        let p_up_lash = vec3f(up_q_xz.x - UP_DISK_RADIUS - EYELASH_PROTRUSION, q_up.y, up_q_xz.y);
+        
+        let up_lash_hash = hash21(vec2f(up_sector, cell_id.x));
+        let up_lash_len = EYELASH_LENGTH * (0.5 + 0.5 * up_lash_hash);
+        let up_lash_bend = (up_lash_hash - 0.5) * 2.0;
+        
+        let up_lash_ba = vec3f(up_lash_len, up_lash_len * EYELASH_CURL, up_lash_bend * 0.02);
+        let up_lash_h = clamp(dot(p_up_lash, up_lash_ba) / dot(up_lash_ba, up_lash_ba), 0.0, 1.0);
+        d_up_lash = (length(p_up_lash - up_lash_ba * up_lash_h) - EYELASH_THICKNESS * (1.0 - up_lash_h * 0.8)) * min(1.0, UP_DISK_SCALE_Z);
+    }
 
     if (d_up_lash < d_up_disk) {
         if (d_up_lash < d_final) {
             d_final = d_up_lash;
-            is_eye = 0.0; is_disk = 0.0; is_lash = 1.0; is_big_eye = 0.0;
+            is_eye = 0.0; is_disk = 0.0; is_lash = 1.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0; lid_edge_val = 0.0;
         }
     } else {
         if (d_up_disk < d_final) {
             d_final = d_up_disk;
-            is_eye = 0.0; is_disk = 1.0; is_lash = 0.0; is_big_eye = 0.0;
+            is_eye = 0.0; is_disk = 1.0; is_lash = 0.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0;
+            lid_edge_val = clamp(up_r / UP_DISK_RADIUS, 0.0, 1.0);
         }
     }
 
     // ---------------------------------------------------
-    // Lower Eyelid & Eyelashes
+    // 6. LOWER EYELID & EYELASHES
     // ---------------------------------------------------
     var p_dn = p_local;
     let dn_tilt = mix(DN_DISK_TILT, 1.2, blink_val);
@@ -468,40 +595,40 @@ fn map(p_in: vec3f) -> MapResult {
     let d_dn_raw = vec2f(dn_r - DN_DISK_RADIUS, abs(q_dn.y + dn_wrinkle) - DN_DISK_THICKNESS);
     let d_dn_disk = (min(max(d_dn_raw.x, d_dn_raw.y), 0.0) + length(max(d_dn_raw, vec2f(0.0)))) * min(1.0, DN_DISK_SCALE_Z);
     
-    // Eyelashes
-    let dn_a = atan2(q_dn.z, q_dn.x);
-    let dn_sector = round(dn_a / lash_angle_step);
-    let dn_new_a = dn_a - dn_sector * lash_angle_step;
-    
-    let dn_q_xz = vec2f(cos(dn_new_a), sin(dn_new_a)) * dn_r;
-    
-    // Apply EYELASH_PROTRUSION to shift the root outward
-    let p_dn_lash = vec3f(dn_q_xz.x - DN_DISK_RADIUS + EYELASH_PROTRUSION, q_dn.y - (EYELASH_PROTRUSION * 0.5), dn_q_xz.y);
-    
-    let dn_lash_hash = hash21(vec2f(dn_sector + 100.0, cell_id.y));
-    let dn_lash_len = EYELASH_LENGTH * (0.5 + 0.5 * dn_lash_hash);
-    let dn_lash_bend = (dn_lash_hash - 0.5) * 2.0;
-    
-    // Apply EYELASH_CURL to angle them out
-    let dn_lash_ba = vec3f(-dn_lash_len, dn_lash_len * (EYELASH_CURL + 0.3 * dn_lash_bend), dn_lash_bend * 0.02);
-    let dn_lash_h = clamp(dot(p_dn_lash, dn_lash_ba) / dot(dn_lash_ba, dn_lash_ba), 0.0, 1.0);
-    let d_dn_lash = (length(p_dn_lash - dn_lash_ba * dn_lash_h) - EYELASH_THICKNESS * (1.0 - dn_lash_h * 0.8)) * min(1.0, DN_DISK_SCALE_Z);
+    var d_dn_lash = 100.0;
+    if (ENABLE_EYELASHES) {
+        let dn_a = atan2(q_dn.z, q_dn.x);
+        let dn_sector = round(dn_a / lash_angle_step);
+        let dn_new_a = dn_a - dn_sector * lash_angle_step;
+        
+        let dn_q_xz = vec2f(cos(dn_new_a), sin(dn_new_a)) * dn_r;
+        let p_dn_lash = vec3f(dn_q_xz.x - DN_DISK_RADIUS - EYELASH_PROTRUSION, q_dn.y, dn_q_xz.y);
+        
+        let dn_lash_hash = hash21(vec2f(dn_sector + 100.0, cell_id.y));
+        let dn_lash_len = EYELASH_LENGTH * (0.5 + 0.5 * dn_lash_hash);
+        let dn_lash_bend = (dn_lash_hash - 0.5) * 2.0;
+        
+        let dn_lash_ba = vec3f(dn_lash_len, -dn_lash_len * EYELASH_CURL, dn_lash_bend * 0.02);
+        let dn_lash_h = clamp(dot(p_dn_lash, dn_lash_ba) / dot(dn_lash_ba, dn_lash_ba), 0.0, 1.0);
+        d_dn_lash = (length(p_dn_lash - dn_lash_ba * dn_lash_h) - EYELASH_THICKNESS * (1.0 - dn_lash_h * 0.8)) * min(1.0, DN_DISK_SCALE_Z);
+    }
 
     if (d_dn_lash < d_dn_disk) {
         if (d_dn_lash < d_final) {
             d_final = d_dn_lash;
-            is_eye = 0.0; is_disk = 0.0; is_lash = 1.0; is_big_eye = 0.0;
+            is_eye = 0.0; is_disk = 0.0; is_lash = 1.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0; lid_edge_val = 0.0;
         }
     } else {
         if (d_dn_disk < d_final) {
             d_final = d_dn_disk;
-            is_eye = 0.0; is_disk = 1.0; is_lash = 0.0; is_big_eye = 0.0;
+            is_eye = 0.0; is_disk = 1.0; is_lash = 0.0; is_big_eye = 0.0; is_caruncle = 0.0; is_3d_vein = 0.0;
+            lid_edge_val = clamp(dn_r / DN_DISK_RADIUS, 0.0, 1.0);
         }
     }
 
 
     // ---------------------------------------------------
-    // DYNAMIC GAZE & COLOR MAPPING
+    // 7. DYNAMIC GAZE & COLOR MAPPING
     // ---------------------------------------------------
     var iris_mask = 0.0;
     
@@ -545,7 +672,7 @@ fn map(p_in: vec3f) -> MapResult {
         eye_uv = p_col_eye / EYE_RADIUS;
     }
     
-    return MapResult(d_final * STEP_SCALE, iris_mask, is_eye, is_disk, is_big_eye, iris_angle, eye_uv, is_lash);
+    return MapResult(d_final * STEP_SCALE, iris_mask, is_eye, is_disk, is_big_eye, iris_angle, eye_uv, is_lash, is_caruncle, spiral_uv, is_3d_vein, vein_pump_val, lid_edge_val);
 }
 
 fn calc_normal(p: vec3f) -> vec3f {
@@ -592,8 +719,13 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
     var res_is_disk = 0.0;
     var res_is_big = 0.0;
     var res_is_lash = 0.0;
+    var res_is_caruncle = 0.0;
     var res_angle = 0.0;
     var res_eye_uv = vec2f(0.0);
+    var res_spiral_uv = vec2f(0.0);
+    var res_is_3d_vein = 0.0;
+    var res_vein_pump = 0.0;
+    var res_lid_edge = 0.0;
 
     var max_steps = STEPS_HIGH;
     if (uniforms.quality < 0.5) {
@@ -616,6 +748,11 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
             res_angle = res_in.iris_angle;
             res_eye_uv = res_in.eye_uv;
             res_is_lash = res_in.is_lash;
+            res_is_caruncle = res_in.is_caruncle;
+            res_spiral_uv = res_in.spiral_uv;
+            res_is_3d_vein = res_in.is_3d_vein;
+            res_vein_pump = res_in.vein_pump;
+            res_lid_edge = res_in.lid_edge_val;
             break; 
         }
         if (t > MAX_DIST) { break; }
@@ -629,6 +766,7 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
         let normal = calc_normal(p);
         let view_dir = normalize(ro - p);
         
+        // --- IRIS & PUPIL COLOR GENERATION ---
         let edge_mix = smoothstep(BAND_1_START, BAND_1_START + BAND_BLEND, res_mask);
         let inner_mix = smoothstep(BAND_2_START, BAND_2_START + BAND_BLEND, res_mask);
         
@@ -658,24 +796,52 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
         eye_albedo = mix(eye_albedo, iris_base_color, inner_mix);
         eye_albedo = mix(eye_albedo, IRIS_PUPIL_COLOR, pupil_mix);
 
-        var albedo = COLOR_SPIRAL;
-        albedo = mix(albedo, eye_albedo, res_is_eye);
-        albedo = mix(albedo, COLOR_EYELID, res_is_disk);
-        albedo = mix(albedo, EYELASH_COLOR, res_is_lash);
+        // --- EYELID COLOR MIXING ---
+        let lid_fade = smoothstep(1.0 - EYELID_EDGE_THICKNESS, 1.0, res_lid_edge);
+        let final_eyelid_color = mix(COLOR_EYELID, COLOR_EYELID_EDGE, lid_fade);
 
+        // --- BACKGROUND SPIRAL & 3D VEIN MIXING ---
+        var spiral_albedo = COLOR_SPIRAL;
+        
+        if (ENABLE_SPIRAL_VEINS && res_is_3d_vein == 0.0) {
+            let sv = get_spiral_veins(res_spiral_uv, uniforms.time);
+            let bg_vein_mask = sv.x;
+            let bg_pump_amount = sv.y;
+            let current_bg_vein_color = mix(SPIRAL_VEIN_COLOR, SPIRAL_VEIN_PUMP_COLOR, bg_pump_amount);
+            spiral_albedo = mix(spiral_albedo, current_bg_vein_color, bg_vein_mask);
+        }
+        
+        if (ENABLE_3D_VEINS) {
+            let current_3d_vein_color = mix(COLOR_3D_VEIN, COLOR_3D_VEIN_PUMP, res_vein_pump);
+            spiral_albedo = mix(spiral_albedo, current_3d_vein_color, res_is_3d_vein);
+        }
+
+        // --- FINAL SURFACE MIXING ---
+        var albedo = spiral_albedo;
+        albedo = mix(albedo, eye_albedo, res_is_eye);
+        albedo = mix(albedo, final_eyelid_color, res_is_disk);
+        albedo = mix(albedo, EYELASH_COLOR, res_is_lash);
+        albedo = mix(albedo, COLOR_CARUNCLE, res_is_caruncle);
+
+        // Dynamic Materials
         var shininess = 16.0; 
-        shininess = mix(shininess, 800.0, res_is_eye); 
-        shininess = mix(shininess, 28.0, res_is_disk); 
+        shininess = mix(shininess, 50.0, res_is_eye); 
+        shininess = mix(shininess, 2.0, res_is_disk); 
         shininess = mix(shininess, 8.0, res_is_lash); 
+        shininess = mix(shininess, 30.0, res_is_caruncle); 
+        shininess = mix(shininess, 2.0, res_is_3d_vein); 
         
         var spec_power = 0.15;
-        spec_power = mix(spec_power, 8.0, res_is_eye);
-        spec_power = mix(spec_power, 0.18, res_is_disk);
+        spec_power = mix(spec_power, 2.0, res_is_eye);
+        spec_power = mix(spec_power, 0.08, res_is_disk);
         spec_power = mix(spec_power, 0.05, res_is_lash);
+        spec_power = mix(spec_power, 2.0, res_is_caruncle);
+        spec_power = mix(spec_power, 0.1, res_is_3d_vein); 
 
         let ao = calc_ao(p, normal) * 0.7;
         let ambient_contrib = 0.2 * albedo * AMBIENT_COLOR * ao;
 
+        // Light 1 (Static Upper Key Light)
         let light_vec = LIGHT_POS - p;
         let light_dist = length(light_vec);
         let light_dir = light_vec / max(light_dist, 0.001);
@@ -689,6 +855,7 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
         let diffuse_contrib = albedo * diff * LIGHT_COLOR * attenuation * ao;
         let specular_contrib = LIGHT_COLOR * specular * attenuation;
 
+        // Light 2 (Dynamic Lower Oscillating Light)
         let l2_y = LIGHT2_BASE_POS.y + sin(uniforms.time * LIGHT2_MOVE_SPEED) * LIGHT2_MOVE_AMP;
         let l2_pos = vec3f(LIGHT2_BASE_POS.x, l2_y, LIGHT2_BASE_POS.z);
 
@@ -705,15 +872,22 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
         let diffuse2_contrib = albedo * l2_diff * LIGHT2_COLOR * l2_atten * ao;
         let specular2_contrib = LIGHT2_COLOR * l2_specular * l2_atten;
 
+        // --- Distance-based Iris Emission ---
         let dist_to_cam = length(p - ro);
         let emission_dist_factor = smoothstep(EMISSION_START_DIST, EMISSION_END_DIST, dist_to_cam);
         
         let iris_glow_mask = inner_mix * (1.0 - pupil_mix) * res_is_eye;
         let emissive_iris_color = mix(EMISSION_BG_COLOR, EMISSION_STRIPE_COLOR, stripe_pattern);
         
-        let emission_contrib = emissive_iris_color * EMISSION_INTENSITY * iris_glow_mask * emission_dist_factor;
+        var final_emission = emissive_iris_color * EMISSION_INTENSITY * iris_glow_mask * emission_dist_factor;
+        
+        // --- 3D Vein Pulse Emission ---
+        if (ENABLE_3D_VEINS && res_is_3d_vein > 0.0) {
+            let pump_emission = COLOR_3D_VEIN_PUMP * res_vein_pump * 4.0 * res_is_3d_vein;
+            final_emission += pump_emission;
+        }
 
-        final_color = ambient_contrib + diffuse_contrib + specular_contrib + diffuse2_contrib + specular2_contrib + emission_contrib;
+        final_color = ambient_contrib + diffuse_contrib + specular_contrib + diffuse2_contrib + specular2_contrib + final_emission;
     }
     return final_color;
 }
@@ -732,4 +906,4 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     } else {
         return vec4f(render_pixel(uv, pos.xy), 1.0);
     }
-} 
+}
