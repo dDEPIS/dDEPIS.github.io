@@ -139,23 +139,36 @@ const LIGHT2_ATTEN_QUAD = 1.5;
 // --- BASE SURFACE MACROS ---
 const COLOR_SPIRAL          = vec3f(1.0, 0.77, 0.71); 
 const COLOR_EYELID          = vec3f(0.785, 0.531, 0.48);   
-const COLOR_EYELID_EDGE     = vec3f(0.5, 0.25, 0.2)*0.8; // Fades into this raw/darker tone at the rim
-const EYELID_EDGE_THICKNESS = 0.8;                  // 0.0 to 1.0 (How far the dark edge reaches inward)
+const COLOR_EYELID_EDGE     = vec3f(0.4, 0.2, 0.15); 
+const EYELID_EDGE_THICKNESS = 0.8;                  
 // ---------------------------------
 
 // --- 3D BULGING VEINS (Between Eyes) ---
 const ENABLE_3D_VEINS        = true;
-const VEIN_3D_WIDTH          = 0.008;                  // How wide the veins spread across the wall
-const VEIN_3D_HEIGHT         = 0.009;                  // How far they physically bulge outward
-const VEIN_3D_CHAOS          = 0.999;                  // 0.0 = full grid, 1.0 = highly broken up and sparse
-const VEIN_3D_WIGGLE         = 0.03;                   // How much they snake around the eyes
-const COLOR_3D_VEIN          = vec3f(0.4, 0.1, 0.1);   // Base dark gross blood color//vec3f(0.4, 0.3, 0.8);  
-const COLOR_3D_VEIN_PUMP     = vec3f(0.0, 0.0, 0.0);   // Bright oxygenated pulse color
-const VEIN_3D_PUMP_SPEED     = 2.0;                    // Speed of the pulse wave
-// ---------------------------------------
+const VEIN_3D_HEIGHT         = 0.028;                  // How high the layers stack above the skin
+const COLOR_3D_VEIN          = vec3f(0.4, 0.1, 0.1);   // Base dark gross blood color 
+const COLOR_3D_VEIN_PUMP     = vec3f(0.04, 0.01, 0.03);   // Bright oxygenated pulse color
+const VEIN_3D_PUMP_SPEED     = 4.0;                    // Speed of the pulse wave traveling through tubes
+
+// Individual Layer Controls: Scale (lower = longer veins), Thickness, Coverage (0.0 to 1.0)
+const L1_SCALE        = 1.6;    // Thickest, lowest layer
+const L1_THICKNESS    = 0.028;
+const L1_COVERAGE     = 1.8;    // Higher = larger connected areas
+const L1_DISTORT      = 1.3;    // How organically it wanders
+
+const L2_SCALE        = 1.8;    // Medium layer
+const L2_THICKNESS    = 0.012;
+const L2_COVERAGE     = 0.5;
+const L2_DISTORT      = 1.2;
+
+const L3_SCALE        = 2.8;    // Thinnest, highest layer
+const L3_THICKNESS    = 0.007;
+const L3_COVERAGE     = 0.35;
+const L3_DISTORT      = 1.5;
+// ----------------------------------------
 
 // --- 2D FLAT SPIRAL VEINS (Background texture) ---
-const ENABLE_SPIRAL_VEINS   = false;
+const ENABLE_SPIRAL_VEINS    = false;
 const SPIRAL_VEIN_COLOR      = vec3f(0.4, 0.05, 0.05); 
 const SPIRAL_VEIN_PUMP_COLOR = vec3f(0.9, 0.2, 0.2);   
 const SPIRAL_VEIN_DENSITY    = 2.0;                    
@@ -212,7 +225,7 @@ struct MapResult {
     spiral_uv: vec2f,
     is_3d_vein: f32,    
     vein_pump: f32,     
-    lid_edge_val: f32,  // Exposes how close the hit is to the rim of the eyelid
+    lid_edge_val: f32,  
 }
 
 @vertex
@@ -236,6 +249,11 @@ fn hash21(p: vec2f) -> f32 {
     var p3 = fract(vec3f(p.xyx) * 0.1031);
     p3 += dot(p3, p3.yzx + 33.33);
     return fract((p3.x + p3.y) * p3.z);
+}
+
+// Ultra-fast fake noise for breaking up the 3D veins without killing FPS
+fn fake_noise(p: vec2f) -> f32 {
+    return sin(p.x * 1.3 + p.y * 2.1) * sin(p.x * 1.7 - p.y * 1.4) * 0.5 + 0.5;
 }
 
 // 2D Value Noise
@@ -371,7 +389,7 @@ fn map(p_in: vec3f) -> MapResult {
     let r_xz = length(p.xz);
     let dist_to_tube_core = length(vec2f(r_xz - COIL_RADIUS, p_y_local));
     let unwrapped_angle = (p.y - p_y_local) / (pitch_scaled * SPIRAL_DIR);
-    var u = (unwrapped_angle / 6.2831853) * (EYE_COLS +sin(uniforms.time ) * PATTERN_SPEED);
+    var u = (unwrapped_angle / 6.2831853) * (EYE_COLS+sin(uniforms.time ) * PATTERN_SPEED);
     
     u -= uniforms.time * PATTERN_SPEED;
     let angle_minor = atan2(p_y_local, r_xz - COIL_RADIUS);
@@ -407,7 +425,7 @@ fn map(p_in: vec3f) -> MapResult {
     
     let path_len = length(vec2f(6.2831853 * COIL_RADIUS, COIL_PITCH));
     let tube_circ = 6.2831853 * TUBE_THICKNESS;
-    let phys_cell_u = path_len / (EYE_COLS +sin(uniforms.time ) * PATTERN_SPEED);
+    let phys_cell_u = path_len / (EYE_COLS+sin(uniforms.time ) * PATTERN_SPEED);
     let phys_cell_v = tube_circ / (EYE_ROWS * 2.0);
 
     let p_local_xy = vec2f(p_unrot.x * phys_cell_u, p_unrot.y * phys_cell_v);
@@ -422,40 +440,53 @@ fn map(p_in: vec3f) -> MapResult {
     var vein_pump_val = 0.0;
 
     if (ENABLE_3D_VEINS) {
-        let wiggle = vec2f(
-            sin(p_local.y * 30.0 + uniforms.time * 2.0),
-            cos(p_local.x * 30.0 + uniforms.time * 2.1)
-        ) * VEIN_3D_WIGGLE;
+        let t = uniforms.time * VEIN_3D_PUMP_SPEED;
+        let base_scale = phys_cell_u * 4.0; // Normalizer for physical space
         
-        let v_domain = p_domain + wiggle;
-        let dist_x = abs(abs(v_domain.x) - 0.5) * phys_cell_u;
-        let dist_y = abs(abs(v_domain.y) - 0.5) * phys_cell_v;
+        // Layer 1: Thick, low layer
+        let p1 = uv_rot * L1_SCALE;
+        // Generate continuous connected web (ridges)
+        let n1 = noise2D(p1 + vec2f(sin(p1.y * L1_DISTORT), cos(p1.x * L1_DISTORT)) * 0.5); 
+        let ridge1 = abs(n1 - 0.5) * base_scale; 
+        // Large scale mask to break them up into connected regions with gaps
+        let mask1 = smoothstep(1.0 - L1_COVERAGE, 1.0 - L1_COVERAGE + 0.3, noise2D(p1 * 0.4));
         
-        let hash_x = hash21(cell_id + vec2f(sign(v_domain.x) * 0.5, 0.0));
-        let hash_y = hash21(cell_id + vec2f(0.0, sign(v_domain.y) * 0.5));
+        // Preserving intentional col deformation and pumping animation
+        let z1 = VEIN_3D_HEIGHT * 0.4 + sin(uv_rot.y * 4.0 + t) * 0.003;
+        let pump1 = max(0.0, sin(uv_rot.y * 10.0 - t * 1.5));
+        let r1 = (L1_THICKNESS + pump1 * 0.004) * mask1 - (1.0 - mask1) * 0.02; 
+        let d_tube1 = length(vec2f(ridge1, local_z - z1)) - r1;
+
+        // Layer 2: Medium height layer
+        let p2 = uv_rot * L2_SCALE + vec2f(13.2, 5.7);
+        let n2 = noise2D(p2 + vec2f(cos(p2.y * L2_DISTORT), sin(p2.x * L2_DISTORT)) * 0.5);
+        let ridge2 = abs(n2 - 0.5) * base_scale;
+        let mask2 = smoothstep(1.0 - L2_COVERAGE, 1.0 - L2_COVERAGE + 0.3, noise2D(p2 * 0.35));
         
-        let n_x = noise2D(uv_rot * 3.0);
-        let n_y = noise2D(uv_rot * 3.0 + 17.0);
+        let z2 = VEIN_3D_HEIGHT * 1.5 + cos(uv_rot.x * 5.0 - t * 0.8) * 0.004;
+        let pump2 = max(0.0, sin(uv_rot.x * 8.0 - t * 1.2));
+        let r2 = (L2_THICKNESS + pump2 * 0.003) * mask2 - (1.0 - mask2) * 0.02;
+        let d_tube2 = length(vec2f(ridge2, local_z - z2)) - r2;
+
+        // Layer 3: Highest, thinnest layer 
+        let p3 = uv_rot * L3_SCALE + vec2f(8.4, 19.1);
+        let n3 = noise2D(p3 + vec2f(sin(p3.y * L3_DISTORT), cos(p3.x * L3_DISTORT)) * 0.5);
+        let ridge3 = abs(n3 - 0.5) * base_scale;
+        let mask3 = smoothstep(1.0 - L3_COVERAGE, 1.0 - L3_COVERAGE + 0.3, noise2D(p3 * 0.45));
         
-        let active_x = smoothstep(VEIN_3D_CHAOS - 0.2, VEIN_3D_CHAOS + 0.2, hash_x + n_x * 0.5);
-        let active_y = smoothstep(VEIN_3D_CHAOS - 0.2, VEIN_3D_CHAOS + 0.2, hash_y + n_y * 0.5);
+        let z3 = VEIN_3D_HEIGHT * 2.6 + sin(uv_rot.y * 9.0 + t * 1.1) * 0.005;
+        let pump3 = max(0.0, sin(uv_rot.y * 14.0 - t * 2.0));
+        let r3 = (L3_THICKNESS + pump3 * 0.002) * mask3 - (1.0 - mask3) * 0.02;
+        let d_tube3 = length(vec2f(ridge3, local_z - z3)) - r3;
+
+        // Smoothly melt the three tube layers together
+        let d_vein_3d = smin(smin(d_tube1, d_tube2, 0.008), d_tube3, 0.008);
         
-        let pump = max(0.0, sin(uv_rot.y * 8.0 - uniforms.time * VEIN_3D_PUMP_SPEED));
-        vein_pump_val = pump;
+        vein_pump_val = max(max(pump1 * mask1, pump2 * mask2), pump3 * mask3);
         
-        let r_x = mix(-0.02, VEIN_3D_WIDTH + pump * 0.008, active_x);
-        let r_y = mix(-0.02, VEIN_3D_WIDTH + pump * 0.008, active_y);
-        
-        // Aspect ratio squashes the tubes down so they bulge without floating off the surface
-        let height_ratio = VEIN_3D_WIDTH / max(VEIN_3D_HEIGHT, 0.0001);
-        
-        let d_tube_x = (length(vec2f(dist_x, local_z * height_ratio)) - r_x) / max(1.0, height_ratio);
-        let d_tube_y = (length(vec2f(dist_y, local_z * height_ratio)) - r_y) / max(1.0, height_ratio);
-        
-        let d_vein_3d = smin(d_tube_x, d_tube_y, 0.005);
-        
-        is_3d_vein = smoothstep(0.01, 0.0, d_vein_3d - local_z);
-        d_final = smin(d_final, d_vein_3d, 0.015);
+        // Fixed: Use d_vein_3d to ensure all layers render, rather than just d_tube3
+        is_3d_vein = smoothstep(0.01, 0.0, d_tube1 - local_z);
+        d_final = smin(d_final, d_tube1, 0.015);
     }
     
     // Initialization for upper layers
@@ -829,7 +860,7 @@ fn render_pixel(uv: vec2f, fragCoord: vec2f) -> vec3f {
         shininess = mix(shininess, 2.0, res_is_disk); 
         shininess = mix(shininess, 8.0, res_is_lash); 
         shininess = mix(shininess, 30.0, res_is_caruncle); 
-        shininess = mix(shininess, 2.0, res_is_3d_vein); 
+        shininess = mix(shininess, 30.0, res_is_3d_vein); 
         
         var spec_power = 0.15;
         spec_power = mix(spec_power, 2.0, res_is_eye);
