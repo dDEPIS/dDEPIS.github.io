@@ -24,14 +24,6 @@ This is a 2D Ray Tracer I implemented as my third project at BUAS in my first ye
 ![alt text](../2draytracer/W7_light_show.gif)
 
 
-# Goals
-
- ---
-
-- This was my first contact with ray tracing, helping me grasp the fundamental concepts of it
-
-- Improving C++ skills and gaining experience with CPU-based algorithm optimization techniques
-
 ![alt text](../2draytracer/W6_Perf_Mirrors_Many_Prim.gif)
 
 

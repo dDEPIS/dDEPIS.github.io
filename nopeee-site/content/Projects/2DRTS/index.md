@@ -26,12 +26,6 @@ My very first project at BUAS in Year 1. A 2D RTS tank game, rendered on the CPU
 
 ![alt text](../2drts/Combat_AI.gif)
  
-# Goals
-
- --- 
-
- - Getting exposed to some basic concepts involved in game development, like AI implementation, sprite rendering and collision detection
-
 
 ![alt text](../2drts/Local_col2.gif)
 

@@ -21,15 +21,10 @@ The plugin is now available on FAB, and it is free for personal use. You can fin
 
 ![alt text](../ue5colortools/ColorToolsDemo.gif)
 
-# Goals
-
-- Learn more about color theory and apply 
-- Make a professional tool, both esthetically and functionally
-- Distribute the plugin for free on FAB 
 
 
 # Implementation
 
-{{< article link="/articles/UEColorToolsArticle/" showSummary=true compactSummary=true >}}
+{{< article link="/articles/uecolortoolsarticle/" showSummary=true compactSummary=true >}}
 
 

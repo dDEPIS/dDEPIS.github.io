@@ -60,6 +60,37 @@ const MAT_THORNS   = 5.0;
 const MAT_LEAVES   = 6.0;
 const MAT_TENTACLE = 7.0;
 
+// ---------------------------------------------------------------------------
+// Ground Texture Macros
+// ---------------------------------------------------------------------------
+const ENABLE_TEXTURED_GROUND = true;
+
+// Brick Geometry
+const BRICK_SIZE            = vec2f(0.8, 0.4); 
+const BRICK_HEIGHT          = 0.04;
+const BRICK_MORTAR_WIDTH    = 0.04;
+const BRICK_CORNER_RADIUS   = 0.06; // How round the 2D corners are
+const BRICK_BEVEL           = 0.04; // How soft the top edge slopes down
+const MORTAR_BLEND_SOFTNESS = 0.08; // How softly the color gradients into the groove
+
+// Noise Patterns
+const NOISE_MACRO_SCALE     = 8.5;
+const NOISE_DETAIL_SCALE    = 31.0;
+
+// Material Colors
+const COLOR_ROCK            =vec3f(0.18, 0.18, 0.20);
+const COLOR_STONE2          = vec3f(0.004, 0.005, 0.004);
+const COLOR_DIRT            = vec3f(0.298, 0.078, 0.075);
+const COLOR_MOSS            =  vec3f(0.071, 0.216, 0.118);
+const COLOR_MORTAR_2         = vec3f(0.298, 0.078, 0.075)*2.5;
+const COLOR_MORTAR       = vec3f(1.0, 1.0, 1.0)*1.5;
+
+// Material Properties: (Roughness, Specular Power)
+const MAT_PROP_ROCK         = vec2f(40.0, 0.1);
+const MAT_PROP_DIRT         = vec2f(15.0, 0.4);
+const MAT_PROP_MOSS         = vec2f(5.0,  0.2);
+const MAT_PROP_MORTAR       = vec2f(80.0, 0.02);
+
 // The falling petals, their floor glow, and generally heavier extras only
 // kick in at medium quality and above. Low-end devices skip them entirely.
 fn extras_enabled() -> bool {
@@ -108,6 +139,54 @@ fn sdCone(p: vec3f, c: vec2f, h: f32) -> f32 {
 fn smin(a: f32, b: f32, k: f32) -> f32 {
     let h = clamp(0.5 + 0.5 * (b - a) / k, 0.0, 1.0);
     return mix(b, a, h) - k * h * (1.0 - h);
+}
+
+fn noise2D(p: vec2f) -> f32 {
+    let i = floor(p);
+    let f = fract(p);
+    let u = f * f * (3.0 - 2.0 * f);
+    let a = hash12(i);
+    let b = hash12(i + vec2f(1.0, 0.0));
+    let c = hash12(i + vec2f(0.0, 1.0));
+    let d = hash12(i + vec2f(1.0, 1.0));
+    return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
+}
+
+fn fbm(p: vec2f) -> f32 {
+    var f = 0.0;
+    var uv = p;
+    var amp = 0.5;
+    for (var i = 0; i < 4; i++) {
+        f += amp * noise2D(uv);
+        uv *= 2.0;
+        amp *= 0.5;
+    }
+    return f;
+}
+fn sdRoundedBox2D(p: vec2f, b: vec2f, r: f32) -> f32 {
+    let q = abs(p) - b + vec2f(r);
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
+fn getGroundHeight(p_xz: vec2f) -> f32 {
+    if (!ENABLE_TEXTURED_GROUND) { return 0.0; }
+
+    var uv = p_xz;
+    let row = floor(uv.y / BRICK_SIZE.y);
+    // Stagger every other row
+    if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
+
+    // Map to local brick cell space [-BRICK_SIZE/2, BRICK_SIZE/2]
+    let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
+    let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
+
+    // Distance field: < 0 is inside the brick, > 0 is in the mortar
+    let d = sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
+
+    // Smoothly curve the height downward at the edges using the bevel macro
+    let height_mask = smoothstep(0.0, -BRICK_BEVEL, d);
+
+    return height_mask * BRICK_HEIGHT;
 }
 
 fn sdVerticalVesicaSegment(p: vec3f, h_in: f32, w_in: f32) -> f32 {
@@ -747,11 +826,16 @@ fn map(p_in: vec3f) -> vec2f {
 
     let hole_mask = smoothstep(dirt_radius, dirt_radius * 0.7, r);
 
+    // Replace the existing ground_height logic in map() with this:
     let hole_depth = 0.2;
     var ground_height = -0.5 - (hole_mask * hole_depth);
 
-    var mat = MAT_GROUND;
+    if (ENABLE_TEXTURED_GROUND) {
+        // Add brick height, fading it out smoothly as it enters the center hole
+        ground_height += getGroundHeight(p.xz) * (1.0 - hole_mask);
+    }
 
+    var mat = MAT_GROUND;
     if (r < dirt_radius) {
         mat = MAT_HOLE;
 
@@ -947,11 +1031,61 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mat_base = floor(mat_id);
         let mat_frac = fract(mat_id);
 
-        if (abs(mat_base - MAT_GROUND) < 0.1) {
-            albedo = vec3f(0.2, 0.2, 0.2);
-            roughness = 10.0;
-            spec_power = 0.3;
+       if (abs(mat_base - MAT_GROUND) < 0.1) {
+            if (!ENABLE_TEXTURED_GROUND) {
+                albedo = vec3f(0.2, 0.2, 0.2);
+                roughness = 10.0;
+                spec_power = 0.3;
+            } else {
+                // Generate FBM noise utilizing your size macros
+                let n = fbm(p.xz * NOISE_MACRO_SCALE);
+                let n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
 
+                let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
+                let dirt_mask = smoothstep(0.45, 0.8, n - n_detail * 0.1) * (1.0 - moss_mask);
+                
+                // Track grid for individual block variations
+                var uv = p.xz;
+                let row = floor(uv.y / BRICK_SIZE.y);
+                if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
+                let brick_id = floor(uv / BRICK_SIZE);
+
+                // Base block properties
+                let is_stone2 = smoothstep(0.3, 0.6, hash12(brick_id));
+                var block_albedo = mix(COLOR_ROCK, COLOR_STONE2, is_stone2);
+                var block_roughness = MAT_PROP_ROCK.x;
+                var block_spec = MAT_PROP_ROCK.y;
+
+                // Blend Dirt
+                if (dirt_mask > 0.0) {
+                    block_albedo = mix(block_albedo, COLOR_DIRT, dirt_mask);
+                    block_roughness = mix(block_roughness, MAT_PROP_DIRT.x, dirt_mask);
+                    block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
+                }
+
+                // Blend Moss
+                if (moss_mask > 0.0) {
+                    block_albedo = mix(block_albedo, COLOR_MOSS*0.7, moss_mask);
+                    block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
+                    block_spec = mix(block_spec, MAT_PROP_MOSS.y, moss_mask);
+                }
+
+                // Evaluate the 2D SDF again to align the color perfectly with the geometry
+                let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
+                let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
+                let d = sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
+                
+                // Use the softness macro to blur the transition between brick and mortar
+                let mortar_mask = smoothstep(-MORTAR_BLEND_SOFTNESS, MORTAR_BLEND_SOFTNESS, d);
+
+                albedo = mix(block_albedo, COLOR_MORTAR, mortar_mask);
+                roughness = mix(block_roughness, MAT_PROP_MORTAR.x, mortar_mask);
+                spec_power = mix(block_spec, MAT_PROP_MORTAR.y, mortar_mask);
+
+                albedo *= (0.7 + 0.3 * n_detail); // Apply high-frequency noise variation
+            }
+
+            // (Keep your existing falling petals shadow/glow logic down here)
             if (extras_enabled()) {
                 let floor_effects = getPetalFloorEffects(p, uniforms.time);
                 let shadow_amt = floor_effects.x;
@@ -962,7 +1096,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
                 let base_light = mix(COLOR_RED, COLOR_WHITE, uniforms.color_t);
                 let dissolve_light = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t);
-
                 let final_glow_color = mix(base_light, dissolve_light, color_shift);
 
                 emission += final_glow_color * light_amt * 1.5;
@@ -1054,7 +1187,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mist_intensity = mist_thickness * 0.6* (1.0 - fog_factor);
 
         let mist_color = current_dissolve_color;
-        final_color = mix(final_color, mist_color, mist_intensity);
+      //  final_color = mix(final_color, mist_color, mist_intensity);
     }
 
     let noise = hash12(pos.xy + uniforms.time);

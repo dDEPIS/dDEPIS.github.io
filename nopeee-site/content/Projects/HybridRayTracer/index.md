@@ -17,17 +17,6 @@ This was my second project in my second year at BUAS, a deferred hybrid ray trac
 
 ![alt text](../hybridraytracer/All.png)
 
-# Goals
-
----
-
-- Further exploring ray tracing concepts and learning how to use DXR 
-
-- Getting to understand and implement a deferred renderer
-
-- Getting to write an article on about it
-
-- Exploring a modern rendering technique
 
 
 ![alt text](../hybridraytracer/PBR.png)

@@ -29,15 +29,6 @@ draft: false
 
 ![alt text](../3drts/Menu_Diff_and_delete.gif)
 
-# Goals
-
- ---
-
-- Getting some hands on experience with Open GLES on an embeded environment
-
-- First interaction with a physics engine
-
-- Getting to learn how to use ImGui, preparing me for future projects 
 
 ![alt text](../3drts/Selection_Det_Callcack.gif)
 
@@ -47,6 +38,8 @@ draft: false
  ---
 
 - Running on a Raspberry Pi, being rendered with Open GLES
+
+- Using ImGui for the UI
 
 - Using the Bullet Physics library
 

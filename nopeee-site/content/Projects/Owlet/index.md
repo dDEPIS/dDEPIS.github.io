@@ -18,12 +18,6 @@ draft: false
 
 Owlet is an RTS game developed using the PEPI custom engine. I worked as a graphics programmer in the team, building the foundation of the PEPI renderer(first 8 weeks) and then collaborationg with one more graphics programmer to build the tools demanded by our artists for the game and optimizing the performance of the renderer(for 8 more weeks). The PEPI renderer was built on top of my [Hybrid RayTracing renderer]({{< ref "/projects/hybridraytracer" >}}), making use of some of its features.
 
-# Goals
-
-- Experiencing working in a larger team of programmers
-- Developing tools requested by other disciplines in the team
-- Contributing to building a fully working game engine, later to be used in making a game
-
 
 # My Contributions:
 

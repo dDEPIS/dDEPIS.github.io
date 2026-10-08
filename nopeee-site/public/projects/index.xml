@@ -18,7 +18,7 @@
       <author>ddepis.d@gmail.com (DEPIS)</author>
       <guid>http://localhost:1313/projects/thesynthesizer/</guid>
       <description>A digital subtractive synthesizer I implemented. Can do a lot of cool stuff.</description>
-      
+      <media:content xmlns:media="http://search.yahoo.com/mrss/" url="http://localhost:1313/projects/thesynthesizer/cover.png" />
     </item>
     
     <item>
