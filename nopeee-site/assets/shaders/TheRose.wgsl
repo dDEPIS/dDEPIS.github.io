@@ -65,13 +65,13 @@ const MAT_TENTACLE = 7.0;
 // ---------------------------------------------------------------------------
 const ENABLE_TEXTURED_GROUND = true;
 
-// Brick Geometry
-const BRICK_SIZE            = vec2f(0.8, 0.4); 
+const BRICK_SHAPE           = 1; // 0 = Rectangular, 1 = Hexagonal
+const BRICK_SIZE            = vec2f(0.5, 0.5); // y = x * 0.866 for perfect hex tiling
 const BRICK_HEIGHT          = 0.04;
 const BRICK_MORTAR_WIDTH    = 0.04;
-const BRICK_CORNER_RADIUS   = 0.06; // How round the 2D corners are
-const BRICK_BEVEL           = 0.04; // How soft the top edge slopes down
-const MORTAR_BLEND_SOFTNESS = 0.08; // How softly the color gradients into the groove
+const BRICK_CORNER_RADIUS   = 0.01; // Still rounds the 6 points perfectly
+const BRICK_BEVEL           = 0.04; 
+const MORTAR_BLEND_SOFTNESS = 0.08;
 
 // Noise Patterns
 const NOISE_MACRO_SCALE     = 8.5;
@@ -81,7 +81,7 @@ const NOISE_DETAIL_SCALE    = 31.0;
 const COLOR_ROCK            =vec3f(0.18, 0.18, 0.20);
 const COLOR_STONE2          = vec3f(0.004, 0.005, 0.004);
 const COLOR_DIRT            = vec3f(0.298, 0.078, 0.075);
-const COLOR_MOSS            =  vec3f(0.071, 0.216, 0.118);
+const COLOR_MOSS            =  vec3f(0.071, 0.216, 0.118)*2;
 const COLOR_MORTAR_2         = vec3f(0.298, 0.078, 0.075)*2.5;
 const COLOR_MORTAR       = vec3f(1.0, 1.0, 1.0)*1.5;
 
@@ -90,6 +90,13 @@ const MAT_PROP_ROCK         = vec2f(40.0, 0.1);
 const MAT_PROP_DIRT         = vec2f(15.0, 0.4);
 const MAT_PROP_MOSS         = vec2f(5.0,  0.2);
 const MAT_PROP_MORTAR       = vec2f(80.0, 0.02);
+
+
+// Crevice Tentacles
+const CREVICE_DOMAIN_SIZE  = 0.4;  // Size of the repetition grid
+const CREVICE_SHIFT_AMOUNT = 0.8;  // How far they can wander from the cell center (0.0 to 1.0)
+const CREVICE_MAX_HEIGHT   = 0.75; // Base height they can grow to
+
 
 // The falling petals, their floor glow, and generally heavier extras only
 // kick in at medium quality and above. Low-end devices skip them entirely.
@@ -152,6 +159,38 @@ fn noise2D(p: vec2f) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+// Exact 2D distance to a pointy-topped hexagon (branchless)
+fn sdHexagon(p_in: vec2f, r: f32) -> f32 {
+    let k = vec3f(-0.866025404, 0.5, 0.577350269);
+    
+    // Swap X and Y to orient the hexagon points vertically
+    var p = abs(vec2f(p_in.y, p_in.x)); 
+    
+    p -= 2.0 * min(dot(k.xy, p), 0.0) * k.xy;
+    p -= vec2f(clamp(p.x, -k.z * r, k.z * r), r);
+    return length(p) * sign(p.y);
+}
+
+// Unified distance function for both physical displacement and color masking
+fn getBrickDistance(p_xz: vec2f) -> f32 {
+    var uv = p_xz;
+    let row = floor(uv.y / BRICK_SIZE.y);
+    
+    // Stagger every other row
+    if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
+
+    let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
+    
+    if (BRICK_SHAPE == 0) {
+        let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
+        return sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
+    } else {
+        // Pointy-topped hexagon radius is driven by the horizontal grid size
+        let r = (BRICK_SIZE.x * 0.5) - (BRICK_MORTAR_WIDTH * 0.5);
+        return sdHexagon(local_p, r) - BRICK_CORNER_RADIUS;
+    }
+}
+
 fn fbm(p: vec2f) -> f32 {
     var f = 0.0;
     var uv = p;
@@ -163,6 +202,78 @@ fn fbm(p: vec2f) -> f32 {
     }
     return f;
 }
+
+// Small, chaotic tentacles that only grow out of the brick mortar
+fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
+    let spacing = CREVICE_DOMAIN_SIZE;
+    let cell = floor(p.xz / spacing);
+    let local_p = fract(p.xz / spacing) - 0.5;
+    let sign_p = sign(local_p);
+
+    var d_min = 100.0;
+    var mat_id = MAT_LEAVES;
+
+    // 2x2 neighbor check to prevent ray tearing when shifting objects across cells
+    for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
+        for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
+            let neighbor_offset = vec2f(i, j) * sign_p;
+            let current_cell = cell + neighbor_offset;
+
+            // Generate two distinct random seeds based on the cell coordinate
+            let seed1 = hash12(current_cell);
+            let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
+
+            // Shift the root randomly within the enlarged domain
+            let cell_center = (current_cell + 0.5) * spacing;
+            let offset = (vec2f(seed1, seed2) - 0.5) * (spacing * CREVICE_SHIFT_AMOUNT);
+            let root_xz = cell_center + offset;
+
+            // Check if this new random position is inside the mortar
+            let brick_d = getBrickDistance(root_xz);
+            
+            // Only grow if the distance is well into the positive (mortar) space
+            let growth_mask = smoothstep(0.005, 0.02, brick_d);
+
+            if (growth_mask > 0.01) {
+                // Fade them out near the center dirt hole
+                let r = length(root_xz);
+                let hole_size = 0.5 + sin(time * 0.3) * 0.2;
+                let hole_mask = smoothstep(hole_size * 0.7, hole_size * 1.0, r);
+                let final_growth = growth_mask * hole_mask;
+
+                if (final_growth > 0.01) {
+                    // Mortar sits perfectly at y = -0.5
+                    var q = vec3f(p.x - root_xz.x, p.y - (-0.5), p.z - root_xz.y);
+
+                    // Randomize height per-tentacle
+                    let max_h = CREVICE_MAX_HEIGHT * final_growth * (0.4 + seed1 * 0.6);
+                    let h = clamp(q.y, 0.0, max_h);
+
+                    // Chaotic movement driven by height and time
+                    let phase = seed1 * 100.0;
+                    let sway_x = sin(time * 6.0 + phase + h * 12.0) * 0.2 * h;
+                    let sway_z = cos(time * 5.1 + phase + h * 11.0) * 0.2 * h;
+
+                    let core = vec3f(sway_x, h, sway_z);
+                    
+                    // Taper the thickness toward the tip
+                    let thickness = 0.032 * (1.0 - (h / max_h));
+                    let d = length(q - core) - thickness;
+
+                    if (d < d_min) {
+                        d_min = d;
+                        // Bake the seed into the material fraction so each gets a random color blend
+                        mat_id = MAT_LEAVES + seed1;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Under-relax the distance slightly to accommodate the intense bending
+    return vec2f(d_min * 0.75, mat_id); 
+}
+
 fn sdRoundedBox2D(p: vec2f, b: vec2f, r: f32) -> f32 {
     let q = abs(p) - b + vec2f(r);
     return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
@@ -171,19 +282,7 @@ fn sdRoundedBox2D(p: vec2f, b: vec2f, r: f32) -> f32 {
 fn getGroundHeight(p_xz: vec2f) -> f32 {
     if (!ENABLE_TEXTURED_GROUND) { return 0.0; }
 
-    var uv = p_xz;
-    let row = floor(uv.y / BRICK_SIZE.y);
-    // Stagger every other row
-    if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
-
-    // Map to local brick cell space [-BRICK_SIZE/2, BRICK_SIZE/2]
-    let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
-    let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
-
-    // Distance field: < 0 is inside the brick, > 0 is in the mortar
-    let d = sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
-
-    // Smoothly curve the height downward at the edges using the bevel macro
+    let d = getBrickDistance(p_xz);
     let height_mask = smoothstep(0.0, -BRICK_BEVEL, d);
 
     return height_mask * BRICK_HEIGHT;
@@ -864,10 +963,19 @@ fn map(p_in: vec3f) -> vec2f {
         res = vec2f(d_core, MAT_HOLE);
     }
 
-    let tentacles = sdTentacles(p, time, hole_size);
+   let tentacles = sdTentacles(p, time, hole_size);
     if (tentacles.x < res.x) {
         res = tentacles;
     }
+
+    // --- ADD THE CREVICE TENTACLES HERE ---
+    if (ENABLE_TEXTURED_GROUND) {
+        let mini_tentacles = sdCreviceTentacles(p, time);
+        if (mini_tentacles.x < res.x) {
+            res = mini_tentacles;
+        }
+    }
+    // --------------------------------------
 
     let flower_pos = vec3f(0.0, 2.0, 0.0);
 
@@ -1040,9 +1148,10 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 // Generate FBM noise utilizing your size macros
                 let n = fbm(p.xz * NOISE_MACRO_SCALE);
                 let n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
+                let n_detail_2 = fbm((p.xz+vec2f(53.5,46.2)) * NOISE_DETAIL_SCALE);
 
                 let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
-                let dirt_mask = smoothstep(0.45, 0.8, n - n_detail * 0.1) * (1.0 - moss_mask);
+                let dirt_mask = smoothstep(0.45, 0.8, n*3.0 - n_detail_2 *1.9); //* (1.0 - moss_mask);
                 
                 // Track grid for individual block variations
                 var uv = p.xz;
@@ -1063,22 +1172,23 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                     block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
                 }
 
-                // Blend Moss
-                if (moss_mask > 0.0) {
+               if (moss_mask > 0.0) {
                     block_albedo = mix(block_albedo, COLOR_MOSS*0.7, moss_mask);
                     block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
                     block_spec = mix(block_spec, MAT_PROP_MOSS.y, moss_mask);
                 }
 
-                // Evaluate the 2D SDF again to align the color perfectly with the geometry
-                let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
-                let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
-                let d = sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
+                // Call our unified SDF
+                let d = getBrickDistance(p.xz);
+                
+                // Crossfade mortar color: When color_t is 0.0 (red rose), it uses COLOR_MORTAR (white). 
+                // When color_t is 1.0 (white rose), it uses COLOR_MORTAR_2 (red).
+                let current_mortar_color = mix(COLOR_MORTAR, COLOR_MORTAR_2, uniforms.color_t);
                 
                 // Use the softness macro to blur the transition between brick and mortar
                 let mortar_mask = smoothstep(-MORTAR_BLEND_SOFTNESS, MORTAR_BLEND_SOFTNESS, d);
 
-                albedo = mix(block_albedo, COLOR_MORTAR, mortar_mask);
+                albedo = mix(block_albedo, current_mortar_color, mortar_mask);
                 roughness = mix(block_roughness, MAT_PROP_MORTAR.x, mortar_mask);
                 spec_power = mix(block_spec, MAT_PROP_MORTAR.y, mortar_mask);
 
@@ -1187,7 +1297,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mist_intensity = mist_thickness * 0.6* (1.0 - fog_factor);
 
         let mist_color = current_dissolve_color;
-      //  final_color = mix(final_color, mist_color, mist_intensity);
+        final_color = mix(final_color, mist_color, mist_intensity);
     }
 
     let noise = hash12(pos.xy + uniforms.time);
