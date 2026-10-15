@@ -47,8 +47,8 @@ const GLOW_FOG_DENSITY = 0.002;       // weaker fog so bloom lingers in air
 const GRAIN_STRENGTH   = 25.0 / 255.0;
 
 // Palette. color_t crossfades between these at runtime.
-const COLOR_RED   = vec3f(0.298, 0.078, 0.075)*0.5;
-const COLOR_WHITE =vec3f(0.8, 0.722, 0.722) * 0.5; //vec3f(0.8, 0.75, 0.7) * 0.5;
+const COLOR_RED   = vec3f(0.298, 0.078, 0.075) * 0.5;
+const COLOR_WHITE = vec3f(0.8, 0.722, 0.722) * 0.5;
 
 // Material ids, packed into the .y of every distance result.
 const MAT_GROUND   = 0.0;
@@ -78,25 +78,26 @@ const NOISE_MACRO_SCALE     = 8.5;
 const NOISE_DETAIL_SCALE    = 31.0;
 
 // Material Colors
-const COLOR_ROCK            =vec3f(0.18, 0.18, 0.20);
+const COLOR_ROCK            = vec3f(0.18, 0.18, 0.20);
 const COLOR_STONE2          = vec3f(0.004, 0.005, 0.004);
 const COLOR_DIRT            = vec3f(0.298, 0.078, 0.075);
-const COLOR_MOSS            =  vec3f(0.071, 0.216, 0.118)*2;
-const COLOR_MORTAR_2         = vec3f(0.298, 0.078, 0.075)*2.5;
-const COLOR_MORTAR       = vec3f(1.0, 1.0, 1.0)*1.5;
+const COLOR_MOSS            = vec3f(0.071, 0.216, 0.118) * 2.0;
+const COLOR_MORTAR_2        = vec3f(0.298, 0.078, 0.075) * 2.5;
+const COLOR_MORTAR          = vec3f(1.0, 1.0, 1.0) * 1.5;
 
 // Material Properties: (Roughness, Specular Power)
-const MAT_PROP_ROCK         = vec2f(40.0, 0.1);
-const MAT_PROP_DIRT         = vec2f(15.0, 0.4);
+const MAT_PROP_ROCK         = vec2f(60.0, 1.0);
+const MAT_PROP_DIRT         = vec2f(2.0, 0.4);
 const MAT_PROP_MOSS         = vec2f(5.0,  0.2);
 const MAT_PROP_MORTAR       = vec2f(80.0, 0.02);
 
-
-// Crevice Tentacles
-const CREVICE_DOMAIN_SIZE  = 0.4;  // Size of the repetition grid
-const CREVICE_SHIFT_AMOUNT = 0.8;  // How far they can wander from the cell center (0.0 to 1.0)
-const CREVICE_MAX_HEIGHT   = 0.75; // Base height they can grow to
-
+// Crevice Tentacles & Heightmap Root Network
+const ENABLE_ROOT_NETWORK   = true;
+const ROOT_HEIGHT           = 0.015; // Heightmap elevation of the surface roots
+const ROOT_THICKNESS        = 0.015;  // Width of the surface roots
+const CREVICE_DOMAIN_SIZE   = 0.4;   // Size of the repetition grid
+const CREVICE_SHIFT_AMOUNT  = 0.8;   // How far they can wander from the cell center (0.0 to 1.0)
+const CREVICE_MAX_HEIGHT    = 0.75;  // Base height they can grow to
 
 // The falling petals, their floor glow, and generally heavier extras only
 // kick in at medium quality and above. Low-end devices skip them entirely.
@@ -159,6 +160,11 @@ fn noise2D(p: vec2f) -> f32 {
     return mix(mix(a, b, u.x), mix(c, d, u.x), u.y);
 }
 
+fn sdRoundedBox2D(p: vec2f, b: vec2f, r: f32) -> f32 {
+    let q = abs(p) - b + vec2f(r);
+    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
+}
+
 // Exact 2D distance to a pointy-topped hexagon (branchless)
 fn sdHexagon(p_in: vec2f, r: f32) -> f32 {
     let k = vec3f(-0.866025404, 0.5, 0.577350269);
@@ -203,8 +209,42 @@ fn fbm(p: vec2f) -> f32 {
     return f;
 }
 
+// Continuous, loop-free heightmap root network radiating from the center rose
+fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
+    // 1. Primary radial arteries spiraling out from the center hole (integer angle multipliers prevent seams)
+    let wave1 = sin(r * 3.5 - time * 0.05+ sin(a * 3.0) * 1.2) * 0.45;
+    let d_radial1 = abs(sin((a + wave1) * 3.0)) * (r / 5.0);
+
+    // 2. Secondary counter-spiraling roots that cross and branch with the primary ones
+    let wave2 = cos(r * 4.5 + time * 0.05 + cos(a * 4.0) * 1.2) * 0.45;
+    let d_radial2 = abs(sin((a + wave2) *4.0)) * (r / 7.0);
+
+    // 3. Domain-warped 2D gyroid web to link the roots across the bricks
+    let gp = p_xz * 1.5 + vec2f(sin(p_xz.y * 1.5 + time * 0.0), cos(p_xz.x * 1.5 - time * 0.0)) * 0.7;
+    let d_web = abs(sin(gp.x) * cos(gp.y) + sin(gp.y * 1.2) * cos(gp.x * 1.2)) * 0.16;
+
+    // Smoothly weld the radial arteries and the surface web together in 2D
+    let d_roots = smin(smin(d_radial1, d_radial2, 0.03), d_web, 0.035);
+
+    // Taper root width and height out in the distance
+    let dist_fade = smoothstep(4.5, 4.0, r);
+    let width = ROOT_THICKNESS * (0.5 + 0.5* dist_fade );
+
+    // Parabolic cylindrical profile for the heightmap
+    let norm_d = clamp(d_roots / max(width, 0.001), 0.0, 1.0);
+    let profile = (1.0 - norm_d * norm_d);
+
+    return profile * profile * ROOT_HEIGHT;//* (1+sin(r * 3.5 - time * 0.05+ sin(a * 3.0) * 1.2 ))*0.5;// * dist_fade;
+}
+
 // Small, chaotic tentacles that only grow out of the brick mortar
 fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
+    // Fast bounding plane: skip the 2x2 loop completely when the ray is above the tentacles
+    let max_y = -0.5 + CREVICE_MAX_HEIGHT + 0.15;
+    if (p.y > max_y) {
+        return vec2f(p.y - max_y + 0.1, MAT_LEAVES);
+    }
+
     let spacing = CREVICE_DOMAIN_SIZE;
     let cell = floor(p.xz / spacing);
     let local_p = fract(p.xz / spacing) - 0.5;
@@ -251,19 +291,20 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
 
                     // Chaotic movement driven by height and time
                     let phase = seed1 * 100.0;
-                    let sway_x = sin(time * 6.0 + phase + h * 12.0) * 0.2 * h;
-                    let sway_z = cos(time * 5.1 + phase + h * 11.0) * 0.2 * h;
+                    let sway_x = sin(time * 6.0 + seed1 * 700.0 + h * 12.0*seed2) * 0.2 * h*seed1;
+                    let sway_z = cos(time * 5.1 + seed2 * 500.0 + h * 11.0*seed1) * 0.2 * h*seed2;
 
                     let core = vec3f(sway_x, h, sway_z);
                     
                     // Taper the thickness toward the tip
-                    let thickness = 0.032 * (1.0 - (h / max_h));
+                    let thickness = 0.037 * (1.0 - (h / max_h));
                     let d = length(q - core) - thickness;
 
                     if (d < d_min) {
                         d_min = d;
-                        // Bake the seed into the material fraction so each gets a random color blend
-                        mat_id = MAT_LEAVES + seed1;
+                        // Encode base glow intensity (1.0 at the root, 0.0 higher up) into the material fraction
+                     //   let base_glow = smoothstep(CREVICE_GLOW_HEIGHT, 0.0, h) * 0.99;
+                        mat_id = MAT_LEAVES ;
                     }
                 }
             }
@@ -272,11 +313,6 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
     
     // Under-relax the distance slightly to accommodate the intense bending
     return vec2f(d_min * 0.75, mat_id); 
-}
-
-fn sdRoundedBox2D(p: vec2f, b: vec2f, r: f32) -> f32 {
-    let q = abs(p) - b + vec2f(r);
-    return length(max(q, vec2f(0.0))) + min(max(q.x, q.y), 0.0) - r;
 }
 
 fn getGroundHeight(p_xz: vec2f) -> f32 {
@@ -289,14 +325,11 @@ fn getGroundHeight(p_xz: vec2f) -> f32 {
 }
 
 fn sdVerticalVesicaSegment(p: vec3f, h_in: f32, w_in: f32) -> f32 {
-
     var h = h_in * 0.5;
     var w = w_in * 0.5;
 
     let d = 0.5 * (h * h - w * w) / w;
-
     let q = vec2f(length(p.xz), abs(p.y - h));
-
     let condition = (h * q.x < d * (q.y - h));
 
     let t = select(
@@ -331,7 +364,6 @@ fn udTriangle(p: vec3f, a: vec3f, b: vec3f, c: vec3f) -> f32 {
     let d_edge_c = dot2(ac * clamp(dot(ac, pc) / dot2(ac), 0.0, 1.0) - pc);
 
     let dist_edge = min(min(d_edge_a, d_edge_b), d_edge_c);
-
     let dist_face = dot(nor, pa) * dot(nor, pa) / dot2(nor);
 
     let result_sq = select(
@@ -345,14 +377,12 @@ fn udTriangle(p: vec3f, a: vec3f, b: vec3f, c: vec3f) -> f32 {
 
 fn opPolarRep(p: vec3f, repetitions: f32, offset_radius: f32) -> vec3f {
     let PI = 3.14159265;
-
     let angle_step = 2.0 * PI / repetitions;
 
     let current_angle = atan2(p.z, p.x);
     let dist = length(p.xz);
 
     let sector = round(current_angle / angle_step);
-
     let new_angle = current_angle - sector * angle_step;
 
     let q_xz = vec2f(
@@ -387,9 +417,7 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     );
 
     let cycle_angle = time * 0.4 + sector * 3.7;
-
     let advanced_angle = cycle_angle + 0.007;
-
     let retract_blend = smoothstep(0.05, -0.05, cos(advanced_angle));
 
     let spawn_phase = sin(cycle_angle);
@@ -402,10 +430,8 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let max_length = 2.2 * growth_factor;
     let h = clamp(q.x, 0.0, max_length);
 
-   let base_arch = h * 1.2 - (h * h * 0.35);
-
+    let base_arch = h * 1.2 - (h * h * 0.35);
     let tip_mask = smoothstep(max_length * 0.6, max_length, h);
-
     let tip_lift = pow(tip_mask, 2.0) * 0.7;
 
     let arch_y = base_arch + tip_lift;
@@ -439,7 +465,6 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     if (lobe_id == 1.0) {
         lobe_mat = MAT_STEM;
     } else if (lobe_id == 2.0) {
-
         lobe_mat = MAT_TENTACLE + clamp(retract_blend, 0.0, 0.99);
     }
 
@@ -451,7 +476,6 @@ fn sdPetal(p: vec3f, s: f32) -> f32 {
     var pos = p;
 
     let t = smoothstep(0.2, 0.35, s);
-
     let width_factor = mix(0.3, 1.0, t);
 
     let cup_strength = mix(1.9, 0.05, t);
@@ -461,18 +485,15 @@ fn sdPetal(p: vec3f, s: f32) -> f32 {
 
     let curl_factor = mix(0.9, 3.2, t);
 
-  let tip_height = max(pos.y - 0.3, 0.0);
-    let tip_side = max(abs(pos.x)/curl_factor - 0.1, 0.0);
+    let tip_height = max(pos.y - 0.3, 0.0);
+    let tip_side = max(abs(pos.x) / curl_factor - 0.1, 0.0);
 
-    let curl_amount = pow(tip_height, 2.0) * 2.0 * t +  pow(tip_side, 2.0)*0.8;
-
+    let curl_amount = pow(tip_height, 2.0) * 2.0 * t + pow(tip_side, 2.0) * 0.8;
     pos.z -= curl_amount;
 
-let bulge_domain = vec2f(pos.x, pos.y * 0.7);
+    let bulge_domain = vec2f(pos.x, pos.y * 0.7);
     let dist_sq = dot(bulge_domain, bulge_domain);
-
     let gaussian = exp(-4.0 * dist_sq);
-
     let bulge_strength = 0.25;
 
     pos.z -= gaussian * bulge_strength;
@@ -480,19 +501,14 @@ let bulge_domain = vec2f(pos.x, pos.y * 0.7);
     let taper_strength = mix(0.3, 0.5, t);
     let taper = 1.0 + taper_strength * pos.y;
 
-    let p_x =(pos.x) / (clamp(taper, 0.1, 2.0)* width_factor);
-
+    let p_x = (pos.x) / (clamp(taper, 0.1, 2.0) * width_factor);
     let d_2d = length(vec2f(p_x, pos.y)) - 0.8;
-
-    
-
     
     let thickness = 0.01;
     let d_z = abs(pos.z) - thickness;
 
     let w = vec2f(d_2d, d_z);
     return min(max(w.x, w.y), 0.0) + length(max(w, vec2f(0.0)));
-
 }
 
 // petals drifting down and dissolving on the ground
@@ -505,7 +521,7 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
     var d_min: f32 = 100.0;
     var final_mat: f32 = MAT_ROSE;
 
-    for (var i: f32 = 0.0; i <=1.0; i += 1.0) {
+    for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
         for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
             let neighbor_offset = vec2f(i, j) * sign_p;
             let current_cell = cell + neighbor_offset;
@@ -523,15 +539,13 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let ground_y = -0.45;
             let ground_dist = virtual_drop_y - ground_y;
 
-            var dissolve_progress = smoothstep(12,19, local_time);
-
+            var dissolve_progress = smoothstep(12.0, 19.0, local_time);
             let size = 0.1 + seed * 0.04;
 
             var actual_y: f32 = virtual_drop_y;
             let landing_zone = 0.5;
 
             if (ground_dist < landing_zone && ground_dist > 0.0) {
-
                 let t = ground_dist / landing_zone;
                 actual_y = ground_y + landing_zone * (t * t);
             } else if (ground_dist <= 0.0) {
@@ -563,27 +577,23 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let local_q = q / size;
             let d_base = sdPetal(local_q, 0.32) * size;
 
-            let noise = (sin(local_q.x * 6.0) * sin(local_q.y * 9.0)* sin(local_q.z * 2.0)) * 0.5 + 0.5;
+            let noise = (sin(local_q.x * 6.0) * sin(local_q.y * 9.0) * sin(local_q.z * 2.0)) * 0.5 + 0.5;
 
             let hole_size = dissolve_progress * 1.4;
             let d_holes = (1.0 - noise) - hole_size;
 
             let d = max(d_base, -d_holes * size * 0.15) * 0.6;
 
-            if (d < d_min)
-            {
+            if (d < d_min) {
                 d_min = d;
 
                 if (dissolve_progress > 0.0) {
                     let rim_thickness = 0.05;
 
                     if (d_holes < rim_thickness) {
-
                         let glow_intensity = smoothstep(rim_thickness, 0.0, abs(d_holes));
-
                         final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
-                    }
-                    else {
+                    } else {
                         let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                         let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
                         final_mat = MAT_ROSE + gradient;
@@ -604,7 +614,6 @@ fn sdRose(p: vec3f) -> vec2f {
     let d_sphere = length(p - vec3f(0.0, 0.1, 0.0)) - 0.3;
 
     if (d_sphere > 0.05) {
-
         return vec2f(d_sphere, MAT_ROSE);
     }
 
@@ -623,7 +632,7 @@ fn sdRose(p: vec3f) -> vec2f {
         var q = p - petal_center;
         q = opRotateY(q, -theta + 1.57);
 
-        let tilt = -0.3 + (i / petal_count)* (0.9 + sin(time) * 0.15);
+        let tilt = -0.3 + (i / petal_count) * (0.9 + sin(time) * 0.15);
         q = opRotateX(q, -tilt);
         q = q / 0.2;
 
@@ -641,7 +650,6 @@ fn sdRose(p: vec3f) -> vec2f {
 
 // leaf blade on a short bent petiole
 fn sdLeaf(p: vec3f) -> f32 {
-
     let petiole_length = 0.12;
     let p_start = vec3f(0.0, 0.0, 0.0);
     let p_end = vec3f(petiole_length, 0.03, 0.0);
@@ -663,7 +671,6 @@ fn sdLeaf(p: vec3f) -> f32 {
     let leaf_width = 0.15 * sin(normalized_x * 3.14159);
 
     let vein_pattern = cos(q.x * 120.0 - abs(q.z) * 80.0) * 0.5 + 0.5;
-
     let vein_mask = smoothstep(0.0, 0.02, abs(q.z)) * (1.0 - normalized_x * 0.5);
 
     q.y += vein_pattern * vein_mask * 0.0015;
@@ -683,7 +690,7 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     let ba = b - a;
     let ba_length = length(ba);
 
-    let h = clamp( dot(pa, ba) / dot(ba, ba), 0.0, 1.0 );
+    let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
     let wiggle = sin(h * 10.28318) * 0.5;
     let straightness_mask = pow((1.0 - h), 0.8);
     let offset_dir = vec3f(bend, 0.0, bend * 0.2);
@@ -757,49 +764,42 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
 
 // one thorn
 fn sdSpine(p: vec3f) -> f32 {
-    var q = p-vec3f(0.0,0.7,0.0);
+    var q = p - vec3f(0.0, 0.7, 0.0);
 
-    q.z *=7.0;
-
-    q.x /= abs(q.y)*0.7;
-    q.x -= (1+q.y) * 1.5;
+    q.z *= 7.0;
+    q.x /= abs(q.y) * 0.7;
+    q.x -= (1.0 + q.y) * 1.5;
 
     let h = 1.0;
     let r = 0.15;
 
-return sdCone(q, vec2f(r,r), h);
-
+    return sdCone(q, vec2f(r, r), h);
 }
 
 // assembles the flower: stem, sepals, bud and rose head
 fn flower(p: vec3f, location: vec3f) -> vec2f {
-
-  let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.4;
+    let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.4;
 
     if (d_sphere > 1.3) {
-        return vec2f(d_sphere,0);
+        return vec2f(d_sphere, 0.0);
     }
 
-  let time =uniforms.time;
+    let time = uniforms.time;
 
-    let center = vec3f(sin(time)*0.05,(1-abs(sin(time)))*0.03, sin(time)*0.03);
-
+    let center = vec3f(sin(time) * 0.05, (1.0 - abs(sin(time))) * 0.03, sin(time) * 0.03);
     let pos = p - (center + location);
+    let pos_all = p - location;
 
-   let pos_all =  p - location;
-
-   let wind_bend = 0.3 + sin( 1.5 ) * 0.01;
-
+    let wind_bend = 0.3 + sin(1.5) * 0.01;
     let stem_start = vec3f(0.0, -location.y - 0.5, 0.0);
-let stem_end = center;
+    let stem_end = center;
 
-let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
+    let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
 
     var q = opPolarRep(pos, 5.0, 0.1);
 
-    let curve = q.x * q.x*8 ;
-
-    let wave = sin(time + q.x * 50.0) * 0.005 + sin(time + q.z * 50.0) * 0.005 +sin(time + q.x * 80.0) * 0.003 + sin(time +     q.z * 80.0) * 0.003 ;
+    let curve = q.x * q.x * 8.0;
+    let wave = sin(time + q.x * 50.0) * 0.005 + sin(time + q.z * 50.0) * 0.005 + sin(time + q.x * 80.0) * 0.003 + sin(time + q.z * 80.0) * 0.003;
 
     q.y += curve + wave;
 
@@ -811,17 +811,15 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
     let d_flat = udTriangle(q, v1, v2, v3);
     let d_sepals = d_flat - 0.01;
 
-    var d_bud = sdVerticalVesicaSegment( pos - vec3f(0.0, -0.13, 0.0), 0.4, 0.20);
+    var d_bud = sdVerticalVesicaSegment(pos - vec3f(0.0, -0.13, 0.0), 0.4, 0.20);
     let cutoff_height = 0.1;
     d_bud = max(d_bud, pos.y - cutoff_height);
 
-   let rose_data = sdRose(pos + vec3f(0.0, -0.03, 0.0));
+    let rose_data = sdRose(pos + vec3f(0.0, -0.03, 0.0));
     let rose_dist = rose_data.x;
 
     let d_bulb_and_sepals = smin(d_sepals, d_bud, 0.02);
-
     let d_all_greenery = smin(d_stem.x, d_bulb_and_sepals, 0.02);
-
     let flower_final = min(rose_dist, d_all_greenery);
 
     var material = d_stem.y;
@@ -830,7 +828,7 @@ let d_stem = sdStemWithSpines(pos_all, stem_start, stem_end, wind_bend, 0.04);
         material = MAT_LEAVES;
     }
 
-    if(rose_dist < d_all_greenery) {
+    if (rose_dist < d_all_greenery) {
         material = rose_data.y;
     }
 
@@ -866,7 +864,6 @@ fn getPetalFloorEffects(p: vec3f, time: f32) -> vec3f {
             let ground_dist = virtual_drop_y - ground_y;
 
             if (ground_dist > -10.0 && ground_dist < 1.5) {
-
                 var actual_y = virtual_drop_y;
                 let landing_zone = 0.5;
 
@@ -914,34 +911,41 @@ fn getPetalFloorEffects(p: vec3f, time: f32) -> vec3f {
 fn map(p_in: vec3f) -> vec2f {
     var p = p_in;
 
-    let time = uniforms.time ;
+    let time = uniforms.time;
 
     let a = atan2(p.z, p.x);
     let r = length(p.xz);
 
-    let hole_size = 0.5 + sin(time *0.3) * 0.2;
-
-    let dirt_radius = hole_size + sin(sin(time * 0.1) * a * 7.0 + time * 0.8) * 0.1*hole_size + cos(a * 3.14 - time * 0.2) * 0.08*hole_size;
-
+    let hole_size = 0.5 + sin(time * 0.3) * 0.2;
+    let dirt_radius = hole_size + sin(sin(time * 0.1) * a * 7.0 + time * 0.8) * 0.1 * hole_size + cos(a * 3.14 - time * 0.2) * 0.08 * hole_size;
     let hole_mask = smoothstep(dirt_radius, dirt_radius * 0.7, r);
 
-    // Replace the existing ground_height logic in map() with this:
     let hole_depth = 0.2;
     var ground_height = -0.5 - (hole_mask * hole_depth);
+
+    var mat = MAT_GROUND;
 
     if (ENABLE_TEXTURED_GROUND) {
         // Add brick height, fading it out smoothly as it enters the center hole
         ground_height += getGroundHeight(p.xz) * (1.0 - hole_mask);
+
+        // Add the continuous heightmap root network directly onto the ground height
+        if (ENABLE_ROOT_NETWORK) {
+            let root_h = getRootHeight(p.xz, r, a, time) * (1.0 - hole_mask * 0.5);
+            ground_height += root_h;
+            if (root_h > 0.002) {
+                mat = MAT_LEAVES;
+            }
+        }
     }
 
-    var mat = MAT_GROUND;
     if (r < dirt_radius) {
         mat = MAT_HOLE;
 
-        let noise = sin(time + p.x*10.0)*0.03 + sin(time*3.0+p.z*13.0)*0.03 +
-                    sin(2.5*time + p.x*15.0)*0.05 + sin(2.0*time + p.z*18.0)*0.01 +
-                    sin(8.0*time+30.0 + p.x*110.0)*0.002 + sin(time+35.0+p.z*115.0)*0.002 +
-                    sin(6.0*time+10.0 + p.x*127.0)*0.001 + sin(4.0*time+5.0+p.z*143.0)*0.001;
+        let noise = sin(time + p.x * 10.0) * 0.03 + sin(time * 3.0 + p.z * 13.0) * 0.03 +
+                    sin(2.5 * time + p.x * 15.0) * 0.05 + sin(2.0 * time + p.z * 18.0) * 0.01 +
+                    sin(8.0 * time + 30.0 + p.x * 110.0) * 0.002 + sin(time + 35.0 + p.z * 115.0) * 0.002 +
+                    sin(6.0 * time + 10.0 + p.x * 127.0) * 0.001 + sin(4.0 * time + 5.0 + p.z * 143.0) * 0.001;
 
         ground_height += noise * hole_mask;
     }
@@ -949,49 +953,40 @@ fn map(p_in: vec3f) -> vec2f {
     var res = vec2f((p.y - ground_height) * 0.7, mat);
 
     let core_center = vec3f(0.0, -0.65, 0.0);
-
     let core_radius = hole_size * 0.55;
 
     var d_core = length(p - core_center) - core_radius;
-
     let core_noise = sin(p.x * 40.0 + time * 4.0) * sin(p.y * 40.0 - time * 2.0) * sin(p.z * 40.0 + time * 3.5) * 0.04;
-
     d_core = (d_core + core_noise) * 0.5;
 
     if (d_core < res.x) {
-
         res = vec2f(d_core, MAT_HOLE);
     }
 
-   let tentacles = sdTentacles(p, time, hole_size);
+    let tentacles = sdTentacles(p, time, hole_size);
     if (tentacles.x < res.x) {
         res = tentacles;
     }
 
-    // --- ADD THE CREVICE TENTACLES HERE ---
+    // Upward crevice tentacles
     if (ENABLE_TEXTURED_GROUND) {
         let mini_tentacles = sdCreviceTentacles(p, time);
         if (mini_tentacles.x < res.x) {
             res = mini_tentacles;
         }
     }
-    // --------------------------------------
 
     let flower_pos = vec3f(0.0, 2.0, 0.0);
-
-    let d_t =  flower(p, flower_pos);
+    let d_t = flower(p, flower_pos);
 
     if (d_t.x < res.x) {
-
         res = vec2f(d_t.x, d_t.y);
     }
 
-   
-        let res_petals = sdFallingPetals(p, time);
-        if (res_petals.x < res.x) {
-            res = res_petals;
-        }
-    
+    let res_petals = sdFallingPetals(p, time);
+    if (res_petals.x < res.x) {
+        res = res_petals;
+    }
 
     return res;
 }
@@ -1010,9 +1005,7 @@ fn calc_normal(p: vec3f) -> vec3f {
 // stripped-down scene for shadow rays (tentacles only)
 fn map_shadow(p: vec3f) -> f32 {
     let time = uniforms.time;
-
-    let d_tentacles = sdTentacles(p, time, 0.5 + sin(time *0.3) * 0.2).x;
-
+    let d_tentacles = sdTentacles(p, time, 0.5 + sin(time * 0.3) * 0.2).x;
     return d_tentacles;
 }
 
@@ -1021,35 +1014,31 @@ fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
     var res = 1.0;
     var t = mint;
     var ph = 1e20;
-  if (extras_enabled()) {
-    for(var i = 0; i < SHADOW_STEPS; i++) {
+    if (extras_enabled()) {
+        for (var i = 0; i < SHADOW_STEPS; i++) {
+            let h = map_shadow(ro + rd * t);
 
-        let h = map_shadow(ro + rd * t);
+            let y = h * h / (2.0 * ph);
+            let d = sqrt(h * h - y * y);
+            res = min(res, k * d / max(0.0, t - y));
 
-        let y = h * h / (2.0 * ph);
-        let d = sqrt(h * h - y * y);
-        res = min(res, k * d / max(0.0, t - y));
+            ph = h;
+            t += h;
 
-        ph = h;
-
-        t += h;
-
-        if(res < 0.001 || t > tmax) { break; }
+            if (res < 0.001 || t > tmax) { break; }
+        }
     }
-  }
     res = clamp(res, 0.0, 1.0);
     return res * res * (3.0 - 2.0 * res);
 }
 
 @fragment
-
 fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
-
-   let resolution = uniforms.resolution;
+    let resolution = uniforms.resolution;
     let uv = (pos.xy * 2.0 - resolution) / resolution.y;
     let uv_flipped = vec2f(uv.x, -uv.y);
 
-    let time = uniforms.time * 2.0 ;
+    let time = uniforms.time * 2.0;
 
     let yaw = uniforms.yaw;
     let pitch = CAM_PITCH + clamp(uniforms.pitch, -1.0, 1.0) * CAM_PITCH_GAIN;
@@ -1066,7 +1055,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let up = cross(fwd, right);
     let rd = normalize(fwd + right * uv_flipped.x + up * uv_flipped.y);
 
-   var t = 0.0;
+    var t = 0.0;
     var hit = false;
     var mat_id = -1.0;
 
@@ -1092,32 +1081,31 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mat_base = floor(mat_id);
         let mat_frac = fract(mat_id);
 
-        if ( mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
+        if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
             accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
-        }
-        else if (mat_base == MAT_TENTACLE) {
-
+        } else if (mat_base == MAT_TENTACLE) {
             let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
-
             accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0));
-        }
-        else if (mat_base == MAT_DISSOLVE) {
+        } else if (mat_base == MAT_DISSOLVE) {
             accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac;
+        } else if (mat_base == MAT_LEAVES && mat_frac > 0.0) {
+            // Volumetric base glow at the bottom of the random crevice tentacles
+            accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
         }
 
         if (d < SURF_EPS) { hit = true; break; }
         if (t > MAX_DIST) { break; }
         t = t + d * STEP_SCALE;
     }
-    var final_color =vec3f(0.0, 0.0, 0.0);
 
-   if (hit) {
+    var final_color = vec3f(0.0, 0.0, 0.0);
+
+    if (hit) {
         let p = ro + rd * t;
         let normal = calc_normal(p);
         let view_dir = normalize(ro - p);
 
         let light_pos = LIGHT_POS;
-
         let light_vec = light_pos - p;
         let light_dist = length(light_vec);
         let light_dir = light_vec / light_dist;
@@ -1130,7 +1118,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let diff = clamp(dot(normal, light_dir), 0.1, 1.0);
         let shadow = softshadow(p + normal * 0.01, light_dir, 0.02, light_dist, 16.0);
 
-       var albedo = vec3f(0.0);
+        var albedo = vec3f(0.0);
         var roughness = 1.0;
         var spec_power = 0.0;
         var rim_light = 0.0;
@@ -1139,7 +1127,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let mat_base = floor(mat_id);
         let mat_frac = fract(mat_id);
 
-       if (abs(mat_base - MAT_GROUND) < 0.1) {
+        if (abs(mat_base - MAT_GROUND) < 0.1) {
             if (!ENABLE_TEXTURED_GROUND) {
                 albedo = vec3f(0.2, 0.2, 0.2);
                 roughness = 10.0;
@@ -1148,10 +1136,10 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 // Generate FBM noise utilizing your size macros
                 let n = fbm(p.xz * NOISE_MACRO_SCALE);
                 let n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
-                let n_detail_2 = fbm((p.xz+vec2f(53.5,46.2)) * NOISE_DETAIL_SCALE);
+                let n_detail_2 = fbm((p.xz + vec2f(53.5, 46.2)) * NOISE_DETAIL_SCALE);
 
                 let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
-                let dirt_mask = smoothstep(0.45, 0.8, n*3.0 - n_detail_2 *1.9); //* (1.0 - moss_mask);
+                let dirt_mask = smoothstep(0.45, 0.8, n * 3.0 - n_detail_2 * 1.9);
                 
                 // Track grid for individual block variations
                 var uv = p.xz;
@@ -1172,8 +1160,9 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                     block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
                 }
 
-               if (moss_mask > 0.0) {
-                    block_albedo = mix(block_albedo, COLOR_MOSS*0.7, moss_mask);
+                // Blend Moss
+                if (moss_mask > 0.0) {
+                    block_albedo = mix(block_albedo, COLOR_MOSS * 0.7, moss_mask);
                     block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
                     block_spec = mix(block_spec, MAT_PROP_MOSS.y, moss_mask);
                 }
@@ -1195,7 +1184,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 albedo *= (0.7 + 0.3 * n_detail); // Apply high-frequency noise variation
             }
 
-            // (Keep your existing falling petals shadow/glow logic down here)
             if (extras_enabled()) {
                 let floor_effects = getPetalFloorEffects(p, uniforms.time);
                 let shadow_amt = floor_effects.x;
@@ -1217,7 +1205,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             spec_power = 1.2;
 
         } else if (abs(mat_base - MAT_ROSE) < 0.1) {
-            let base_color = current_dissolve_color*0.6 ;
+            let base_color = current_dissolve_color * 0.6;
             let tip_color = current_rose_color * 0.8;
 
             albedo = mix(base_color, tip_color, smoothstep(0.0, 0.55, mat_frac));
@@ -1247,11 +1235,15 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             albedo = current_rose_color;
             roughness = 60.0;
             spec_power = 0.5;
-        }
-      else if (abs(mat_base - MAT_LEAVES) < 0.1) {
-            albedo = vec3f(0.071, 0.216, 0.118) * 0.2;
+
+        } else if (abs(mat_base - MAT_LEAVES) < 0.1) {
+            // Green leaf material for leaves, heightmap roots, and crevice tentacles,
+            // with petal-colored glow at the base of the crevice tentacles (where mat_frac > 0)
+            let green_leaf = vec3f(0.071, 0.216, 0.118) * 0.2;
+            albedo = mix(green_leaf, current_rose_color, mat_frac * 0.85);
             roughness = 180.0;
             spec_power = 1.2;
+            emission = current_rose_color * mat_frac * 1.8;
 
         } else if (abs(mat_base - MAT_TENTACLE) < 0.1) {
             let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
@@ -1265,14 +1257,14 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
         let ambient = vec3f(0.45) * albedo;
         let diffuse_color = albedo * diff * vec3f(1.0, 0.95, 0.8);
-        let diffuse = diffuse_color * attenuation* shadow ;
+        let diffuse = diffuse_color * attenuation * shadow;
         let spec_angle = max(dot(normal, half_dir), 0.0);
         let specular = pow(spec_angle, roughness) * spec_power * attenuation;
 
         final_color = ambient + diffuse + (vec3f(1.0, 0.9, 0.8) * specular) + (albedo * rim_light * attenuation) + emission;
     }
 
-   if (hit) {
+    if (hit) {
         let hit_mat = floor(mat_id);
 
         if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE || hit_mat == MAT_TENTACLE) {
@@ -1291,11 +1283,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
     if (hit) {
         let p = ro + rd * t;
-
         let mist_thickness = smoothstep(0.7, -0.5, p.y);
-
-        let mist_intensity = mist_thickness * 0.6* (1.0 - fog_factor);
-
+        let mist_intensity = mist_thickness * 0.6 * (1.0 - fog_factor);
         let mist_color = current_dissolve_color;
         final_color = mix(final_color, mist_color, mist_intensity);
     }
