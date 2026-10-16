@@ -15,15 +15,17 @@ showRelatedContent: false
 
 --- 
 
-
-<details>
-<summary>Controls: </summary>
-
-Mouse: 
-
-Movement -> Camera adjustment
-
-Click -> Color Shift
-
-</details>
+<br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br>
 

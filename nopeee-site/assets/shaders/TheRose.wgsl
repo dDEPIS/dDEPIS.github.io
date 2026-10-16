@@ -13,8 +13,39 @@ struct Uniforms {
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
 
 // ---------------------------------------------------------------------------
+// Compile-Time Performance & Feature Toggles (Dead-Code Eliminated when false)
+// ---------------------------------------------------------------------------
+
+// Major Scene Elements
+const ENABLE_FLOWER            = true; // Rose head, stem, thorns, and leaves
+const ENABLE_FALLING_PETALS    = true; // 3D falling petals in map()
+const ENABLE_PETAL_FLOOR_FX    = true; // 2x2 petal shadows and glow on the ground
+const ENABLE_HOLE_TENTACLES    = true; // Large writhing tentacles around the center hole
+const ENABLE_CREVICE_TENTACLES = true; // Rising green tentacles sprouting from roots
+const ENABLE_ROOT_NETWORK      = true; // Heightmap root arteries and web on the ground
+const ENABLE_SHADOWS           = true; // Soft shadow raymarch pass
+const ENABLE_VOLUMETRIC_GLOW   = true; // Per-step glow accumulation in the raymarch loop
+const ENABLE_WILD_EVENT        = true; // Periodic monster tentacle & brick-alignment event
+
+// Ground & Brick Sub-Features
+const ENABLE_TEXTURED_GROUND   = true; // Master switch for brick geometry & materials
+const ENABLE_GROUND_BBOX_OPT   = true; // Skips brick/root heightmap math when ray is high in the air
+const ENABLE_BRICK_WARP        = true; // 2x noise2D domain warping for irregular brick shapes
+const ENABLE_BRICK_CHIPS       = true; // 2x noise2D inward edge chipping
+const ENABLE_BRICK_HOLES       = true; // 2x noise2D surface pits/craters on brick tops
+const ENABLE_GROUND_FBM_MAT    = true; // 3x 4-octave FBM noise for moss/dirt/rock color blending
+
+// ---------------------------------------------------------------------------
 // Tunables. Anything worth poking at lives up here.
 // ---------------------------------------------------------------------------
+
+// Wild Monster Event Tunables
+const WILD_EVENT_PERIOD        = 20.0; // Seconds between each wild event cycle
+const WILD_EVENT_DURATION      = 6.5;  // How many seconds the event takes to ramp up, peak, and fade
+const WILD_HOLE_LENGTH_MULT    = 1.45; // How much longer the main rose-hole tentacles reach
+const WILD_HOLE_WRITHE_MULT    = 3.2;  // Thrashing multiplier for the main rose-hole tentacles
+const WILD_CREVICE_HEIGHT_MULT = 1.5;  // Height multiplier for the green root tentacles
+const WILD_CREVICE_SWAY_MULT   = 3.0;  // Thrashing multiplier for the green root tentacles
 
 // Camera. pitch/yaw come from the mouse; these set the resting pose.
 const CAM_RADIUS     = 2.0;   // distance out from the flower
@@ -63,15 +94,24 @@ const MAT_TENTACLE = 7.0;
 // ---------------------------------------------------------------------------
 // Ground Texture Macros
 // ---------------------------------------------------------------------------
-const ENABLE_TEXTURED_GROUND = true;
-
 const BRICK_SHAPE           = 1; // 0 = Rectangular, 1 = Hexagonal
-const BRICK_SIZE            = vec2f(0.5, 0.5); // y = x * 0.866 for perfect hex tiling
-const BRICK_HEIGHT          = 0.04;
+const BRICK_SIZE            = vec2f(0.5, 0.5);
+const BRICK_HEIGHT          = 0.06;
 const BRICK_MORTAR_WIDTH    = 0.04;
-const BRICK_CORNER_RADIUS   = 0.01; // Still rounds the 6 points perfectly
-const BRICK_BEVEL           = 0.04; 
-const MORTAR_BLEND_SOFTNESS = 0.08;
+const BRICK_CORNER_RADIUS   = 0.025; // Rounds the 6 hex points or 4 box corners
+const BRICK_BEVEL           = 0.02; 
+const MORTAR_BLEND_SOFTNESS = 0.06;  // How softly rock/dirt/moss discolors the mortar edges
+const CREVICE_AO_STRENGTH   = 0.45;  // Ambient occlusion darkening right along the brick-to-mortar crease
+const CREVICE_AO_WIDTH      = 0.025; // Spread of the ambient occlusion shadow in the crevice
+
+// Brick Deformities & Irregularities
+const BRICK_WARP_FREQ       = 2.0;   // Frequency of organic shape bending
+const BRICK_WARP_AMOUNT     = 0.35;  // How much bricks warp/bend into irregular polygons
+const BRICK_CHIP_FREQ       = 16.0;  // Frequency of edge chips and notches
+const BRICK_CHIP_AMOUNT     = 0.022; // How deep the chipped edges eat into the stone
+const BRICK_HOLE_FREQ       = 11.0;  // Frequency of surface craters/pits
+const BRICK_HOLE_DEPTH      = 0.45;  // Depth of surface pits (0.0 to 1.0)
+const BRICK_HEIGHT_VAR      = 0.35;  // Per-brick height variation so stones sit unevenly
 
 // Noise Patterns
 const NOISE_MACRO_SCALE     = 8.5;
@@ -92,17 +132,28 @@ const MAT_PROP_MOSS         = vec2f(5.0,  0.2);
 const MAT_PROP_MORTAR       = vec2f(80.0, 0.02);
 
 // Crevice Tentacles & Heightmap Root Network
-const ENABLE_ROOT_NETWORK   = true;
-const ROOT_HEIGHT           = 0.015; // Heightmap elevation of the surface roots
-const ROOT_THICKNESS        = 0.015;  // Width of the surface roots
-const CREVICE_DOMAIN_SIZE   = 0.4;   // Size of the repetition grid
-const CREVICE_SHIFT_AMOUNT  = 0.8;   // How far they can wander from the cell center (0.0 to 1.0)
-const CREVICE_MAX_HEIGHT    = 0.75;  // Base height they can grow to
+const ROOT_HEIGHT              = 0.015; // Heightmap elevation of the surface roots
+const ROOT_THICKNESS           = 0.010; // Base width of the surface roots
+const TENTACLE_ROOT_THICK_MULT = 2.0;   // 1.0 = tentacle base matches the exact root width it grows from
+const CREVICE_DOMAIN_SIZE      = 0.4;   // Size of the repetition grid
+const CREVICE_SHIFT_AMOUNT     = 0.8;   // How far they can wander from the cell center (0.0 to 1.0)
+const CREVICE_MAX_HEIGHT       = 0.75;  // Base height they can grow to
 
 // The falling petals, their floor glow, and generally heavier extras only
 // kick in at medium quality and above. Low-end devices skip them entirely.
 fn extras_enabled() -> bool {
     return uniforms.quality >= 0.5;
+}
+
+// Smooth 0.0 -> 1.0 -> 0.0 envelope for the periodic monster event
+fn getWildEventFactor(time: f32) -> f32 {
+    if (!ENABLE_WILD_EVENT) { return 0.0; }
+    let cycle_t = time % WILD_EVENT_PERIOD;
+    let half_dur = WILD_EVENT_DURATION * 0.5;
+    let center = WILD_EVENT_PERIOD * 0.55;
+    let dist = abs(cycle_t - center);
+    let raw = smoothstep(half_dur, half_dur * 0.28, dist);
+    return raw * raw * (3.0 - 2.0 * raw);
 }
 
 @vertex
@@ -177,24 +228,67 @@ fn sdHexagon(p_in: vec2f, r: f32) -> f32 {
     return length(p) * sign(p.y);
 }
 
-// Unified distance function for both physical displacement and color masking
-fn getBrickDistance(p_xz: vec2f) -> f32 {
-    var uv = p_xz;
-    let row = floor(uv.y / BRICK_SIZE.y);
-    
-    // Stagger every other row
-    if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
+// Returns vec3f(signed_distance, cell_id.x, cell_id.y)
+// Handles organic domain warping, unclipped Voronoi hex tiling, and inward edge chipping
+fn getBrickData(p_xz: vec2f) -> vec3f {
+    var warped_xz = p_xz;
+    let wild = getWildEventFactor(uniforms.time);
 
-    let local_p = fract(uv / BRICK_SIZE) * BRICK_SIZE - (BRICK_SIZE * 0.5);
-    
-    if (BRICK_SHAPE == 0) {
-        let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
-        return sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
-    } else {
-        // Pointy-topped hexagon radius is driven by the horizontal grid size
-        let r = (BRICK_SIZE.x * 0.5) - (BRICK_MORTAR_WIDTH * 0.5);
-        return sdHexagon(local_p, r) - BRICK_CORNER_RADIUS;
+    // 1. Low-frequency domain warp: smoothly shifts to 0.0 during the wild event so stones lock into a perfect grid
+    if (ENABLE_BRICK_WARP) {
+        let warp = vec2f(
+            noise2D(p_xz * BRICK_WARP_FREQ),
+            noise2D(p_xz * BRICK_WARP_FREQ + vec2f(17.3, 29.1))
+        ) - 0.5;
+        let current_warp_amount = BRICK_WARP_AMOUNT * (1.0 - wild);
+        warped_xz += warp * current_warp_amount;
     }
+
+    var d = 0.0;
+    var cell_id = vec2f(0.0);
+
+    if (BRICK_SHAPE == 0) {
+        var uv = warped_xz;
+        let row = floor(uv.y / BRICK_SIZE.y);
+        if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
+
+        cell_id = floor(uv / BRICK_SIZE);
+        let local_p = (fract(uv / BRICK_SIZE) - 0.5) * BRICK_SIZE;
+        let brick_half_size = (BRICK_SIZE * 0.5) - vec2f(BRICK_MORTAR_WIDTH * 0.5);
+        d = sdRoundedBox2D(local_p, brick_half_size, BRICK_CORNER_RADIUS);
+    } else {
+        // True 2-grid Hexagonal Voronoi tiling (prevents clipped tips and domain seams)
+        let s = vec2f(BRICK_SIZE.x, BRICK_SIZE.y * 1.73205081);
+        let h = s * 0.5;
+
+        let a_id = floor(warped_xz / s);
+        let b_id = floor((warped_xz - h) / s);
+
+        let a = warped_xz - (a_id + 0.5) * s;
+        let b = warped_xz - h - (b_id + 0.5) * s;
+
+        let use_a = dot(a, a) < dot(b, b);
+        let local_p = select(b, a, use_a);
+        cell_id = select(b_id + vec2f(13.7, 27.3), a_id, use_a);
+
+        // Subtract corner radius before sdHexagon so outer bounds stay inside the Voronoi cell
+        let r = (min(BRICK_SIZE.x, BRICK_SIZE.y) * 0.5) - (BRICK_MORTAR_WIDTH * 0.5) - BRICK_CORNER_RADIUS;
+        d = sdHexagon(local_p, r) - BRICK_CORNER_RADIUS;
+    }
+
+    // 2. High-frequency inward edge chipping (strictly >= 0 so mortar boundaries never clip)
+    if (ENABLE_BRICK_CHIPS) {
+        let n1 = noise2D(p_xz * BRICK_CHIP_FREQ);
+        let n2 = noise2D(p_xz * BRICK_CHIP_FREQ * 2.17 + vec2f(31.4, 15.9));
+        let chip_noise = smoothstep(0.25, 0.85, n1 * 0.65 + n2 * 0.35);
+        d += chip_noise * BRICK_CHIP_AMOUNT * mix(1.0, 0.25, wild);
+    }
+
+    return vec3f(d, cell_id.x, cell_id.y);
+}
+
+fn getBrickDistance(p_xz: vec2f) -> f32 {
+    return getBrickData(p_xz).x;
 }
 
 fn fbm(p: vec2f) -> f32 {
@@ -209,38 +303,49 @@ fn fbm(p: vec2f) -> f32 {
     return f;
 }
 
-// Continuous, loop-free heightmap root network radiating from the center rose
-fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
-    // 1. Primary radial arteries spiraling out from the center hole (integer angle multipliers prevent seams)
-    let wave1 = sin(r * 3.5 - time * 0.05+ sin(a * 3.0) * 1.2) * 0.45;
+// Shared 2D distance to the root network (used by both the heightmap and tentacle spawning)
+fn getRootDistance2D(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
+    // 1. Primary radial arteries spiraling out from the center hole
+    let wave1 = sin(r * 3.5 - time * 0.05 + sin(a * 3.0) * 1.2) * 0.45;
     let d_radial1 = abs(sin((a + wave1) * 3.0)) * (r / 5.0);
 
     // 2. Secondary counter-spiraling roots that cross and branch with the primary ones
     let wave2 = cos(r * 4.5 + time * 0.05 + cos(a * 4.0) * 1.2) * 0.45;
-    let d_radial2 = abs(sin((a + wave2) *4.0)) * (r / 7.0);
+    let d_radial2 = abs(sin((a + wave2) * 4.0)) * (r / 7.0);
 
     // 3. Domain-warped 2D gyroid web to link the roots across the bricks
-    let gp = p_xz * 1.5 + vec2f(sin(p_xz.y * 1.5 + time * 0.0), cos(p_xz.x * 1.5 - time * 0.0)) * 0.7;
+    let gp = p_xz * 1.5 + vec2f(sin(p_xz.y * 1.5), cos(p_xz.x * 1.5)) * 0.7;
     let d_web = abs(sin(gp.x) * cos(gp.y) + sin(gp.y * 1.2) * cos(gp.x * 1.2)) * 0.16;
 
     // Smoothly weld the radial arteries and the surface web together in 2D
-    let d_roots = smin(smin(d_radial1, d_radial2, 0.03), d_web, 0.035);
+    return smin(smin(d_radial1, d_radial2, 0.03), d_web, 0.035);
+}
 
-    // Taper root width and height out in the distance
+// Returns the local half-width of the root network at distance r from the center
+fn getRootLocalWidth(r: f32) -> f32 {
     let dist_fade = smoothstep(4.5, 4.0, r);
-    let width = ROOT_THICKNESS * (0.5 + 0.5* dist_fade );
+    return ROOT_THICKNESS * (0.5 + 0.5 * dist_fade);
+}
+
+// Continuous, loop-free heightmap root network radiating from the center rose
+fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
+    let d_roots = getRootDistance2D(p_xz, r, a, time);
+    let width = getRootLocalWidth(r);
 
     // Parabolic cylindrical profile for the heightmap
     let norm_d = clamp(d_roots / max(width, 0.001), 0.0, 1.0);
     let profile = (1.0 - norm_d * norm_d);
 
-    return profile * profile * ROOT_HEIGHT;//* (1+sin(r * 3.5 - time * 0.05+ sin(a * 3.0) * 1.2 ))*0.5;// * dist_fade;
+    return profile * profile * ROOT_HEIGHT;
 }
 
-// Small, chaotic tentacles that only grow out of the brick mortar
+// Small, chaotic tentacles that sprout directly from the root network and inherit its thickness
 fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
+    let wild = getWildEventFactor(time);
+    let current_max_height = CREVICE_MAX_HEIGHT * mix(1.0, WILD_CREVICE_HEIGHT_MULT, wild);
+
     // Fast bounding plane: skip the 2x2 loop completely when the ray is above the tentacles
-    let max_y = -0.5 + CREVICE_MAX_HEIGHT + 0.15;
+    let max_y = -0.5 + current_max_height + 0.15;
     if (p.y > max_y) {
         return vec2f(p.y - max_y + 0.1, MAT_LEAVES);
     }
@@ -252,6 +357,7 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
 
     var d_min = 100.0;
     var mat_id = MAT_LEAVES;
+    let PI = 3.14159265;
 
     // 2x2 neighbor check to prevent ray tearing when shifting objects across cells
     for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
@@ -263,63 +369,105 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
             let seed1 = hash12(current_cell);
             let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
 
-            // Shift the root randomly within the enlarged domain
             let cell_center = (current_cell + 0.5) * spacing;
             let offset = (vec2f(seed1, seed2) - 0.5) * (spacing * CREVICE_SHIFT_AMOUNT);
-            let root_xz = cell_center + offset;
+            let raw_xz = cell_center + offset;
 
-            // Check if this new random position is inside the mortar
-            let brick_d = getBrickDistance(root_xz);
-            
-            // Only grow if the distance is well into the positive (mortar) space
-            let growth_mask = smoothstep(0.005, 0.02, brick_d);
+            // Analytically pull the candidate point onto the nearest radial root artery
+            let r_raw = max(length(raw_xz), 0.001);
+            let a_raw = atan2(raw_xz.y, raw_xz.x);
+            let wave1 = sin(r_raw * 3.5 - time * 0.05 + sin(a_raw * 3.0) * 1.2) * 0.45;
+            let wave2 = cos(r_raw * 4.5 + time * 0.05 + cos(a_raw * 4.0) * 1.2) * 0.45;
 
-            if (growth_mask > 0.01) {
+            let theta1 = (a_raw + wave1) * 3.0;
+            let err1 = (theta1 - round(theta1 / PI) * PI) / 3.0;
+            let theta2 = (a_raw + wave2) * 4.0;
+            let err2 = (theta2 - round(theta2 / PI) * PI) / 4.0;
+
+            let best_err = select(err2, err1, abs(err1) < abs(err2));
+            let snapped_a = a_raw - best_err;
+            let snapped_xz = vec2f(cos(snapped_a), sin(snapped_a)) * r_raw;
+
+            // Clamp within the cell's safe radius so tentacles never clip across cell boundaries
+            let max_shift = spacing * 0.42;
+            let root_xz = cell_center + clamp(snapped_xz - cell_center, vec2f(-max_shift), vec2f(max_shift));
+
+            // Evaluate the exact root distance and local root width at this spawn point
+            let r = length(root_xz);
+            let a = atan2(root_xz.y, root_xz.x);
+            let root_d = getRootDistance2D(root_xz, r, a, time);
+            let local_root_width = getRootLocalWidth(r);
+
+            // How centered the sprout is on the root section (1.0 at center of root, 0.0 at edge)
+            let root_norm = clamp(root_d / max(local_root_width, 0.001), 0.0, 1.0);
+            let root_section_factor = sqrt(max(0.0, 1.0 - root_norm * root_norm));
+
+            if (root_section_factor > 0.05) {
                 // Fade them out near the center dirt hole
-                let r = length(root_xz);
                 let hole_size = 0.5 + sin(time * 0.3) * 0.2;
                 let hole_mask = smoothstep(hole_size * 0.7, hole_size * 1.0, r);
-                let final_growth = growth_mask * hole_mask;
+                let final_growth = root_section_factor * hole_mask;
 
                 if (final_growth > 0.01) {
-                    // Mortar sits perfectly at y = -0.5
+                    // Anchor base at y = -0.5 so it merges cleanly out of the root ridges
                     var q = vec3f(p.x - root_xz.x, p.y - (-0.5), p.z - root_xz.y);
 
-                    // Randomize height per-tentacle
-                    let max_h = CREVICE_MAX_HEIGHT * final_growth * (0.4 + seed1 * 0.6);
+                    // Randomize height per-tentacle (surges taller during the wild monster event)
+                    let height_rand = mix(0.4 + seed1 * 0.6, 0.8 + seed1 * 0.3, wild);
+                    let max_h = current_max_height * final_growth * height_rand;
                     let h = clamp(q.y, 0.0, max_h);
 
-                    // Chaotic movement driven by height and time
-                    let phase = seed1 * 100.0;
-                    let sway_x = sin(time * 6.0 + seed1 * 700.0 + h * 12.0*seed2) * 0.2 * h*seed1;
-                    let sway_z = cos(time * 5.1 + seed2 * 500.0 + h * 11.0*seed1) * 0.2 * h*seed2;
+                    // Calm sway vs. frenzied high-frequency monster thrashing
+                    let calm_x = sin(time * 6.0 + seed1 * 700.0 + h * 12.0 * seed2) * 0.2 * h * seed1;
+                    let calm_z = cos(time * 5.1 + seed2 * 500.0 + h * 11.0 * seed1) * 0.2 * h * seed2;
+
+                    let monster_x = (sin(time * 17.0 + seed1 * 700.0 + h * 22.0) + 0.5 * cos(time * 23.0 - h * 15.0 + seed2 * 300.0)) * 0.14 * WILD_CREVICE_SWAY_MULT * h;
+                    let monster_z = (cos(time * 15.5 + seed2 * 500.0 + h * 20.0) + 0.5 * sin(time * 21.0 - h * 14.0 + seed1 * 400.0)) * 0.14 * WILD_CREVICE_SWAY_MULT * h;
+
+                    let sway_x = mix(calm_x, monster_x, wild);
+                    let sway_z = mix(calm_z, monster_z, wild);
 
                     let core = vec3f(sway_x, h, sway_z);
                     
-                    // Taper the thickness toward the tip
-                    let thickness = 0.037 * (1.0 - (h / max_h));
+                    // Inherit the cross-sectional thickness of the root section, swelling during the wild event
+                    let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, 1.45, wild);
+                    let thickness = inherited_base_r * (1.0 - (h / max_h));
                     let d = length(q - core) - thickness;
 
                     if (d < d_min) {
                         d_min = d;
-                        // Encode base glow intensity (1.0 at the root, 0.0 higher up) into the material fraction
-                     //   let base_glow = smoothstep(CREVICE_GLOW_HEIGHT, 0.0, h) * 0.99;
-                        mat_id = MAT_LEAVES ;
+                        mat_id = MAT_LEAVES;
                     }
                 }
             }
         }
     }
     
-    // Under-relax the distance slightly to accommodate the intense bending
-    return vec2f(d_min * 0.75, mat_id); 
+    // Under-relax slightly more during the wild event to handle steep corkscrews safely
+    return vec2f(d_min * mix(0.75, 0.58, wild), mat_id); 
 }
 
 fn getGroundHeight(p_xz: vec2f) -> f32 {
     if (!ENABLE_TEXTURED_GROUND) { return 0.0; }
 
-    let d = getBrickDistance(p_xz);
-    let height_mask = smoothstep(0.0, -BRICK_BEVEL, d);
+    let brick_data = getBrickData(p_xz);
+    let d = brick_data.x;
+    let brick_id = brick_data.yz;
+
+    var height_mask = smoothstep(0.0, -BRICK_BEVEL, d);
+
+    // 1. Per-brick height variation so stones sit slightly unevenly
+    let brick_var = 1.0 + (hash12(brick_id + vec2f(7.1, 19.3)) - 0.5) * BRICK_HEIGHT_VAR;
+    height_mask *= brick_var;
+
+    // 2. Surface craters and pits etched into the top of the bricks
+    if (ENABLE_BRICK_HOLES) {
+        let pit_n1 = noise2D(p_xz * BRICK_HOLE_FREQ + vec2f(12.3, 45.6));
+        let pit_n2 = noise2D(p_xz * BRICK_HOLE_FREQ * 2.3 + vec2f(67.8, 23.4));
+        let holes = smoothstep(0.58, 0.88, pit_n1 * 0.7 + pit_n2 * 0.3);
+        let hole_mask = holes * smoothstep(0.0, 0.4, height_mask);
+        height_mask = max(0.0, height_mask - hole_mask * BRICK_HOLE_DEPTH);
+    }
 
     return height_mask * BRICK_HEIGHT;
 }
@@ -398,8 +546,9 @@ fn smax(a: f32, b: f32, k: f32) -> f32 {
     return mix(a, b, h) + k * h * (1.0 - h);
 }
 
-// ring of writhing tentacles around the hole
+// ring of writhing tentacles around the hole (erupts into monster tentacles during the wild event)
 fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
+    let wild = getWildEventFactor(time);
     let repetitions = 11.0;
     let angle_step = 6.28318 / repetitions;
 
@@ -421,25 +570,33 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let retract_blend = smoothstep(0.05, -0.05, cos(advanced_angle));
 
     let spawn_phase = sin(cycle_angle);
-    let growth_factor = smoothstep(-0.2, 0.6, spawn_phase);
+    // Force all 11 tentacles to erupt to full size simultaneously during the wild event
+    let growth_factor = mix(smoothstep(-0.2, 0.6, spawn_phase), 1.0, wild);
 
     if (growth_factor < 0.01) {
         return vec2f(100.0, MAT_HOLE);
     }
 
-    let max_length = 2.2 * growth_factor;
+    let max_length = 2.2 * mix(1.0, WILD_HOLE_LENGTH_MULT, wild) * growth_factor;
     let h = clamp(q.x, 0.0, max_length);
 
     let base_arch = h * 1.2 - (h * h * 0.35);
     let tip_mask = smoothstep(max_length * 0.6, max_length, h);
-    let tip_lift = pow(tip_mask, 2.0) * 0.7;
+    let tip_lift = pow(tip_mask, 2.0) * mix(0.7, 1.45, wild);
 
     let arch_y = base_arch + tip_lift;
     let phase = sector * 13.5;
 
-    let move_mask = smoothstep(0.2, max_length, h);
-    let writhe_y = sin(time * 4.0 + h * 6.0 + phase) * 0.15 * move_mask;
-    let writhe_z = cos(time * 3.1 + h * 5.0 + phase) * 0.15 * move_mask;
+    let move_mask = smoothstep(0.15, max_length, h);
+    let calm_wy = sin(time * 4.0 + h * 6.0 + phase) * 0.15;
+    let calm_wz = cos(time * 3.1 + h * 5.0 + phase) * 0.15;
+
+    // Violent multi-wave monster thrashing
+    let wild_wy = (sin(time * 13.0 + h * 9.0 + phase) + 0.5 * cos(time * 19.0 - h * 12.0 + phase)) * 0.11 * WILD_HOLE_WRITHE_MULT;
+    let wild_wz = (cos(time * 11.5 + h * 8.0 + phase) + 0.5 * sin(time * 17.5 - h * 11.0 + phase)) * 0.11 * WILD_HOLE_WRITHE_MULT;
+
+    let writhe_y = mix(calm_wy, wild_wy, wild) * move_mask;
+    let writhe_z = mix(calm_wz, wild_wz, wild) * move_mask;
 
     let core_line = vec3f(h, arch_y + writhe_y, writhe_z);
 
@@ -452,8 +609,8 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let bumps = sin(h * 30.0 - time * 5.0) * cos(angle_around * 5.0);
 
     let taper = 1.0 - (h / max_length);
-    let base_thickness = 0.06 * growth_factor * taper;
-    let gooey_thickness = base_thickness + (muscle_lobes * 0.02 * taper) + (bumps * 0.005 * taper);
+    let base_thickness = mix(0.06, 0.088, wild) * growth_factor * taper;
+    let gooey_thickness = base_thickness + (muscle_lobes * mix(0.02, 0.032, wild) * taper) + (bumps * mix(0.005, 0.012, wild) * taper);
 
     let d = length(q - core_line) - gooey_thickness;
 
@@ -465,10 +622,10 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     if (lobe_id == 1.0) {
         lobe_mat = MAT_STEM;
     } else if (lobe_id == 2.0) {
-        lobe_mat = MAT_TENTACLE + clamp(retract_blend, 0.0, 0.99);
+        lobe_mat = MAT_TENTACLE + clamp(mix(retract_blend, 0.95, wild), 0.0, 0.99);
     }
 
-    return vec2f(d * 0.45, lobe_mat);
+    return vec2f(d * mix(0.45, 0.35, wild), lobe_mat);
 }
 
 // one rose petal
@@ -689,12 +846,22 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     let pa = p - a;
     let ba = b - a;
     let ba_length = length(ba);
+    let time = uniforms.time;
+    let wild = getWildEventFactor(time);
 
     let h = clamp(dot(pa, ba) / dot(ba, ba), 0.0, 1.0);
     let wiggle = sin(h * 10.28318) * 0.5;
     let straightness_mask = pow((1.0 - h), 0.8);
     let offset_dir = vec3f(bend, 0.0, bend * 0.2);
-    let current_offset = offset_dir * wiggle * straightness_mask;
+
+    // Add a writhing serpentine shudder to the rose stem during the wild event
+    let wild_stem_wave = vec3f(
+        sin(time * 12.0 + h * 14.0) * 0.08,
+        0.0,
+        cos(time * 11.0 + h * 12.0) * 0.08
+    ) * h * (1.0 - h) * 4.0 * wild;
+
+    let current_offset = offset_dir * wiggle * straightness_mask + wild_stem_wave;
 
     let pos_on_line = a + ba * h + current_offset;
     let stem_radius = r * (1.0 - h * 0.4);
@@ -733,10 +900,8 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
 
             p_l.x -= (stem_radius - 0.01);
 
-            let time = uniforms.time;
-
-            let wind_sway = sin(time * 3.5 + id * 1.2) * 0.07;
-            let wind_twist = cos(time * 2.8 + id * 1.5) * 0.05;
+            let wind_sway = mix(sin(time * 3.5 + id * 1.2) * 0.07, sin(time * 14.0 + id * 1.2) * 0.22, wild);
+            let wind_twist = mix(cos(time * 2.8 + id * 1.5) * 0.05, cos(time * 12.0 + id * 1.5) * 0.18, wild);
 
             let droop_angle = 0.3 - (id * 0.2) + wind_sway;
             p_l = opRotateZ(p_l, droop_angle);
@@ -925,7 +1090,10 @@ fn map(p_in: vec3f) -> vec2f {
 
     var mat = MAT_GROUND;
 
-    if (ENABLE_TEXTURED_GROUND) {
+    // When ENABLE_GROUND_BBOX_OPT is true, skip expensive brick/root heightmap noise when ray is high above the floor
+    let evaluate_ground_detail = !ENABLE_GROUND_BBOX_OPT || (p.y < -0.35);
+
+    if (ENABLE_TEXTURED_GROUND && evaluate_ground_detail) {
         // Add brick height, fading it out smoothly as it enters the center hole
         ground_height += getGroundHeight(p.xz) * (1.0 - hole_mask);
 
@@ -939,7 +1107,7 @@ fn map(p_in: vec3f) -> vec2f {
         }
     }
 
-    if (r < dirt_radius) {
+    if (r < dirt_radius && evaluate_ground_detail) {
         mat = MAT_HOLE;
 
         let noise = sin(time + p.x * 10.0) * 0.03 + sin(time * 3.0 + p.z * 13.0) * 0.03 +
@@ -963,29 +1131,35 @@ fn map(p_in: vec3f) -> vec2f {
         res = vec2f(d_core, MAT_HOLE);
     }
 
-    let tentacles = sdTentacles(p, time, hole_size);
-    if (tentacles.x < res.x) {
-        res = tentacles;
+    if (ENABLE_HOLE_TENTACLES) {
+        let tentacles = sdTentacles(p, time, hole_size);
+        if (tentacles.x < res.x) {
+            res = tentacles;
+        }
     }
 
-    // Upward crevice tentacles
-    if (ENABLE_TEXTURED_GROUND) {
+    // Upward tentacles connected to the root network
+    if (ENABLE_TEXTURED_GROUND && ENABLE_ROOT_NETWORK && ENABLE_CREVICE_TENTACLES) {
         let mini_tentacles = sdCreviceTentacles(p, time);
         if (mini_tentacles.x < res.x) {
             res = mini_tentacles;
         }
     }
 
-    let flower_pos = vec3f(0.0, 2.0, 0.0);
-    let d_t = flower(p, flower_pos);
+    if (ENABLE_FLOWER) {
+        let flower_pos = vec3f(0.0, 2.0, 0.0);
+        let d_t = flower(p, flower_pos);
 
-    if (d_t.x < res.x) {
-        res = vec2f(d_t.x, d_t.y);
+        if (d_t.x < res.x) {
+            res = vec2f(d_t.x, d_t.y);
+        }
     }
 
-    let res_petals = sdFallingPetals(p, time);
-    if (res_petals.x < res.x) {
-        res = res_petals;
+    if (ENABLE_FALLING_PETALS) {
+        let res_petals = sdFallingPetals(p, time);
+        if (res_petals.x < res.x) {
+            res = res_petals;
+        }
     }
 
     return res;
@@ -1004,6 +1178,9 @@ fn calc_normal(p: vec3f) -> vec3f {
 
 // stripped-down scene for shadow rays (tentacles only)
 fn map_shadow(p: vec3f) -> f32 {
+    if (!ENABLE_HOLE_TENTACLES) {
+        return 100.0;
+    }
     let time = uniforms.time;
     let d_tentacles = sdTentacles(p, time, 0.5 + sin(time * 0.3) * 0.2).x;
     return d_tentacles;
@@ -1011,6 +1188,9 @@ fn map_shadow(p: vec3f) -> f32 {
 
 // penumbra shadows, marched against map_shadow
 fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
+    if (!ENABLE_SHADOWS) {
+        return 1.0;
+    }
     var res = 1.0;
     var t = mint;
     var ph = 1e20;
@@ -1078,19 +1258,20 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         let d = res.x;
         mat_id = res.y;
 
-        let mat_base = floor(mat_id);
-        let mat_frac = fract(mat_id);
+        if (ENABLE_VOLUMETRIC_GLOW) {
+            let mat_base = floor(mat_id);
+            let mat_frac = fract(mat_id);
 
-        if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
-            accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
-        } else if (mat_base == MAT_TENTACLE) {
-            let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
-            accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0));
-        } else if (mat_base == MAT_DISSOLVE) {
-            accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac;
-        } else if (mat_base == MAT_LEAVES && mat_frac > 0.0) {
-            // Volumetric base glow at the bottom of the random crevice tentacles
-            accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
+            if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
+                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
+            } else if (mat_base == MAT_TENTACLE) {
+                let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
+                accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0));
+            } else if (mat_base == MAT_DISSOLVE) {
+                accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac;
+            } else if (mat_base == MAT_LEAVES && mat_frac > 0.0) {
+                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
+            }
         }
 
         if (d < SURF_EPS) { hit = true; break; }
@@ -1133,58 +1314,63 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 roughness = 10.0;
                 spec_power = 0.3;
             } else {
-                // Generate FBM noise utilizing your size macros
-                let n = fbm(p.xz * NOISE_MACRO_SCALE);
-                let n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
-                let n_detail_2 = fbm((p.xz + vec2f(53.5, 46.2)) * NOISE_DETAIL_SCALE);
+                // Fetch both distance and exact Voronoi cell ID from our unified function
+                let brick_data = getBrickData(p.xz);
+                let d = brick_data.x;
+                let brick_id = brick_data.yz;
 
-                let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
-                let dirt_mask = smoothstep(0.45, 0.8, n * 3.0 - n_detail_2 * 1.9);
-                
-                // Track grid for individual block variations
-                var uv = p.xz;
-                let row = floor(uv.y / BRICK_SIZE.y);
-                if (fract(row * 0.5) > 0.0) { uv.x += BRICK_SIZE.x * 0.5; }
-                let brick_id = floor(uv / BRICK_SIZE);
+                // Fade out the discontinuous per-brick hash before reaching the Voronoi cell boundary
+                // so the continuous rock/dirt/moss colors can bleed into the mortar with zero seams
+                let cell_interior_mask = smoothstep(BRICK_MORTAR_WIDTH * 0.4, -0.005, d);
+                let is_stone2 = smoothstep(0.3, 0.6, hash12(brick_id)) * cell_interior_mask;
 
-                // Base block properties
-                let is_stone2 = smoothstep(0.3, 0.6, hash12(brick_id));
                 var block_albedo = mix(COLOR_ROCK, COLOR_STONE2, is_stone2);
                 var block_roughness = MAT_PROP_ROCK.x;
                 var block_spec = MAT_PROP_ROCK.y;
+                var n_detail = 0.5;
 
-                // Blend Dirt
-                if (dirt_mask > 0.0) {
-                    block_albedo = mix(block_albedo, COLOR_DIRT, dirt_mask);
-                    block_roughness = mix(block_roughness, MAT_PROP_DIRT.x, dirt_mask);
-                    block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
+                if (ENABLE_GROUND_FBM_MAT) {
+                    // Generate FBM noise utilizing your size macros
+                    let n = fbm(p.xz * NOISE_MACRO_SCALE);
+                    n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
+                    let n_detail_2 = fbm((p.xz + vec2f(53.5, 46.2)) * NOISE_DETAIL_SCALE);
+
+                    let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
+                    let dirt_mask = smoothstep(0.45, 0.8, n * 3.0 - n_detail_2 * 1.9);
+
+                    // Blend Dirt
+                    if (dirt_mask > 0.0) {
+                        block_albedo = mix(block_albedo, COLOR_DIRT, dirt_mask);
+                        block_roughness = mix(block_roughness, MAT_PROP_DIRT.x, dirt_mask);
+                        block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
+                    }
+
+                    // Blend Moss
+                    if (moss_mask > 0.0) {
+                        block_albedo = mix(block_albedo, COLOR_MOSS * 0.7, moss_mask);
+                        block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
+                        block_spec = mix(block_spec, MAT_PROP_MOSS.y, moss_mask);
+                    }
                 }
 
-                // Blend Moss
-                if (moss_mask > 0.0) {
-                    block_albedo = mix(block_albedo, COLOR_MOSS * 0.7, moss_mask);
-                    block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
-                    block_spec = mix(block_spec, MAT_PROP_MOSS.y, moss_mask);
-                }
-
-                // Call our unified SDF
-                let d = getBrickDistance(p.xz);
-                
-                // Crossfade mortar color: When color_t is 0.0 (red rose), it uses COLOR_MORTAR (white). 
-                // When color_t is 1.0 (white rose), it uses COLOR_MORTAR_2 (red).
+                // Crossfade mortar color: 0.0 (red rose) -> COLOR_MORTAR (white), 1.0 (white rose) -> COLOR_MORTAR_2 (red)
                 let current_mortar_color = mix(COLOR_MORTAR, COLOR_MORTAR_2, uniforms.color_t);
                 
-                // Use the softness macro to blur the transition between brick and mortar
+                // Wide, soft blend so rock/dirt/moss discolors the edges of the mortar crevices seamlessly
                 let mortar_mask = smoothstep(-MORTAR_BLEND_SOFTNESS, MORTAR_BLEND_SOFTNESS, d);
 
                 albedo = mix(block_albedo, current_mortar_color, mortar_mask);
                 roughness = mix(block_roughness, MAT_PROP_MORTAR.x, mortar_mask);
                 spec_power = mix(block_spec, MAT_PROP_MORTAR.y, mortar_mask);
 
+                // Crevice edge ambient occlusion / discoloration along the base of the brick bevel (d ~= 0.0)
+                let edge_ao = smoothstep(-BRICK_BEVEL, 0.0, d) * smoothstep(CREVICE_AO_WIDTH, 0.0, d);
+                albedo *= (1.0 - edge_ao * CREVICE_AO_STRENGTH);
+
                 albedo *= (0.7 + 0.3 * n_detail); // Apply high-frequency noise variation
             }
 
-            if (extras_enabled()) {
+            if (ENABLE_PETAL_FLOOR_FX && extras_enabled()) {
                 let floor_effects = getPetalFloorEffects(p, uniforms.time);
                 let shadow_amt = floor_effects.x;
                 let light_amt = floor_effects.y;
@@ -1237,8 +1423,6 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             spec_power = 0.5;
 
         } else if (abs(mat_base - MAT_LEAVES) < 0.1) {
-            // Green leaf material for leaves, heightmap roots, and crevice tentacles,
-            // with petal-colored glow at the base of the crevice tentacles (where mat_frac > 0)
             let green_leaf = vec3f(0.071, 0.216, 0.118) * 0.2;
             albedo = mix(green_leaf, current_rose_color, mat_frac * 0.85);
             roughness = 180.0;

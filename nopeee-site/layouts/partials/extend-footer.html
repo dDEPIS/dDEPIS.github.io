@@ -1,4 +1,11 @@
 <script type="module">
+  // -----------------------------------------------------------------------
+  // 0. DEBUG & BENCHMARK MACROS
+  // -----------------------------------------------------------------------
+  const SHOW_PERF_HUD     = false;  // Shows live FPS, ms/frame, resolution, and quality tier
+  const FORCE_MAX_QUALITY = false;  // Locks quality = 2, disables CSS blur, bypasses governor
+  const FORCE_NATIVE_RES  = false; // If true (with FORCE_MAX_QUALITY), forces 1.0x scale instead of maxFine (0.55x)
+
   // 1. GLOBALS & INTERACTION STATE
   const inputState = {
     colorT: 0.0,
@@ -82,7 +89,7 @@
   async function initWebGPU() {
     if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
 
-    let currentPath = window.location.pathname.replace(/\/?$/, '/'); 
+    let currentPath = window.location.pathname.replace(/\/?\$/, '/'); 
     let activeKey = null;
 
     if (currentPath === "/" || currentPath === "/index.html/") {
@@ -104,7 +111,10 @@
     const { reduce, coarse } = environment();
     const maxScale = coarse ? activeConfig.maxCoarse : activeConfig.maxFine;
 
-    let targetScale = reduce ? activeConfig.reduceScale : activeConfig.startScale;
+    let forceMaxQuality = FORCE_MAX_QUALITY;
+    const getForcedScale = () => FORCE_NATIVE_RES ? 1.0 : maxScale;
+
+    let targetScale = forceMaxQuality ? getForcedScale() : (reduce ? activeConfig.reduceScale : activeConfig.startScale);
     let renderScale = targetScale;
 
     document.body.style.backgroundColor = "transparent";
@@ -116,6 +126,22 @@
       width: "100vw", height: "100vh",
       zIndex: "-1", pointerEvents: "none",
     });
+
+    // --- PERFORMANCE HUD ELEMENT ---
+    let perfHud = null;
+    if (SHOW_PERF_HUD) {
+      perfHud = document.createElement("div");
+      Object.assign(perfHud.style, {
+        position: "fixed", top: "12px", left: "12px", zIndex: "9999",
+        background: "rgba(0, 0, 0, 0.78)", color: "#00ff88",
+        fontFamily: "monospace", fontSize: "12px", lineHeight: "1.5",
+        padding: "8px 12px", borderRadius: "6px",
+        border: "1px solid rgba(0, 255, 136, 0.3)",
+        pointerEvents: "none", whiteSpace: "pre"
+      });
+      perfHud.textContent = "Measuring FPS...";
+      document.body.appendChild(perfHud);
+    }
 
     const context = canvas.getContext("webgpu");
     const format = navigator.gpu.getPreferredCanvasFormat();
@@ -141,8 +167,6 @@
     // -----------------------------------------------------------------------
     // --- INPUT SENSITIVITY MATH ---
     // -----------------------------------------------------------------------
-    // Curves linear input (-1.0 to 1.0) into an exponential curve.
-    // Higher power = flatter center and steeper edges. Power of 5 is a solid quintic curve.
     function applySensitivityCurve(value, power = 5) {
       return Math.sign(value) * Math.pow(Math.abs(value), power);
     }
@@ -154,7 +178,18 @@
     let usingTilt = false; 
 
     const toggleColor = () => { inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0; };
-    window.addEventListener("keydown", (e) => { if (e.key.toLowerCase() === "c") toggleColor(); });
+    window.addEventListener("keydown", (e) => {
+      const k = e.key.toLowerCase();
+      if (k === "c") toggleColor();
+      // Press 'Q' at any time to toggle forced max quality vs adaptive governor
+      if (k === "q") {
+        forceMaxQuality = !forceMaxQuality;
+        if (forceMaxQuality) {
+          targetScale = getForcedScale();
+          renderScale = targetScale;
+        }
+      }
+    });
 
     // 1. Unified Pointer Down (Captures Mouse Click & Screen Touch)
     window.addEventListener("pointerdown", (e) => { 
@@ -164,7 +199,6 @@
 
     // 2. Unified Pointer Up
     window.addEventListener("pointerup", (e) => {
-      // Ask iOS for permission to read the gyroscope on the very first screen tap
       if (typeof DeviceOrientationEvent !== 'undefined' && typeof DeviceOrientationEvent.requestPermission === 'function') {
         DeviceOrientationEvent.requestPermission()
           .then(permissionState => {
@@ -174,7 +208,6 @@
           }).catch(console.error);
       }
 
-      // Check if it was a quick tap/click instead of a long drag
       const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
       if (travel < 15) toggleColor(); 
     });
@@ -182,29 +215,24 @@
     // 3. Gyroscope Translation Logic
     function handleOrientation(e) {
       if (e.beta === null || e.gamma === null) return;
-      usingTilt = true; // Locks out the mouse-move logic so they don't fight
+      usingTilt = true;
 
-      // Get raw linear values
       let rawYaw = Math.max(-1.0, Math.min(1.0, e.gamma / 30.0));
       let rawPitch = Math.max(-1.0, Math.min(1.0, (e.beta - 45.0) / 30.0));
 
-      // Apply the exponential curve
       inputState.spinInput = applySensitivityCurve(rawYaw, 3);
       inputState.cameraPitch = applySensitivityCurve(rawPitch, 3);
     }
 
-    // Android/Standard browsers will just start listening immediately
     window.addEventListener("deviceorientation", handleOrientation);
 
     // 4. Pointer Move (Only affects desktop/mouse users now)
     window.addEventListener("pointermove", (e) => {
-      if (usingTilt) return; // Ignore the mouse if the phone's gyroscope is active
+      if (usingTilt) return;
       
-      // Get raw linear values
       let rawYaw = Math.max(-1.0, Math.min(1.0, (e.clientX / window.innerWidth) * 2.0 - 1.0));
       let rawPitch = Math.max(-1.0, Math.min(1.0, (e.clientY / window.innerHeight) * 2.0 - 1.0));
 
-      // Apply the exponential curve
       inputState.spinInput = applySensitivityCurve(rawYaw, 3);
       inputState.cameraPitch = applySensitivityCurve(rawPitch, 3);
     });
@@ -225,6 +253,12 @@
     }
 
     function applyVisual() {
+      if (forceMaxQuality) {
+        currentQuality = 2;
+        if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
+        return;
+      }
+
       const t = (renderScale - activeConfig.minScale) / Math.max(1e-4, (maxScale - activeConfig.minScale));
       currentQuality = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
 
@@ -252,12 +286,28 @@
     onResize();
     applyVisual();
 
-    // --- adaptive governor ---
+    // --- adaptive governor & HUD updater ---
     let frameMs = [];
     function governor() {
       if (frameMs.length < GLOBAL_SETTINGS.govWindow) return;
       const avg = frameMs.reduce((a, b) => a + b, 0) / frameMs.length;
+      const maxSpike = Math.max(...frameMs);
       frameMs.length = 0;
+
+      if (perfHud) {
+        const fps = 1000.0 / Math.max(0.001, avg);
+        const modeLabel = forceMaxQuality ? "LOCKED MAX (Press Q)" : "ADAPTIVE (Press Q)";
+        perfHud.textContent =
+          `FPS:     ${fps.toFixed(1)} (${avg.toFixed(2)} ms | max ${maxSpike.toFixed(1)} ms)\n` +
+          `Res:     ${canvas.width}x${canvas.height} (scale ${(renderScale * 100).toFixed(0)}%)\n` +
+          `Quality: Tier ${currentQuality} [${modeLabel}]`;
+      }
+
+      if (forceMaxQuality) {
+        targetScale = getForcedScale();
+        return;
+      }
+
       if (reduce) return;
 
       if (avg > GLOBAL_SETTINGS.slowMs) {
@@ -273,14 +323,20 @@
     let lastTime = performance.now() / 1000;
 
     function frame() {
-      const time = performance.now() / 1000;
-      const dt = Math.min(time - lastTime, 0.1);
-      lastTime = time;
+      const now = performance.now() / 1000;
+      const rawDt = now - lastTime;
+      const dt = Math.min(rawDt, 0.1);
+      lastTime = now;
 
-      frameMs.push(dt * 1000);
+      // Track un-clamped frame delta in ms for accurate performance measurement
+      frameMs.push(rawDt * 1000);
       governor();
 
-      renderScale += (targetScale - renderScale) * Math.min(1, GLOBAL_SETTINGS.scaleLerp * dt);
+      if (forceMaxQuality) {
+        renderScale = getForcedScale();
+      } else {
+        renderScale += (targetScale - renderScale) * Math.min(1, GLOBAL_SETTINGS.scaleLerp * dt);
+      }
       applySize();
       applyVisual();
 
@@ -291,7 +347,7 @@
 
       inputState.colorT += (inputState.targetColorT - inputState.colorT) * GLOBAL_SETTINGS.colorFade * dt;
 
-      activeConfig.updateUniforms(uniformValues, canvas.width, canvas.height, time, currentQuality);
+      activeConfig.updateUniforms(uniformValues, canvas.width, canvas.height, now, currentQuality);
       device.queue.writeBuffer(uniformBuffer, 0, uniformValues);
 
       const encoder = device.createCommandEncoder();
