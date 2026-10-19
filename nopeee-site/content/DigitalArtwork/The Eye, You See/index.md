@@ -13,15 +13,18 @@ showWordCount: false
 showRelatedContent: false
 --- 
 
+WORK IN PROGRESS
 
-<details>
-<summary>Controls: </summary>
-
-Mouse: 
-
-Movement -> Camera adjustment
-
-Click -> Color Shift
-
-</details>
-
+<br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br><br>
+<br>

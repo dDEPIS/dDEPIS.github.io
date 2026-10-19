@@ -5,7 +5,7 @@ categories: ["Project"]
 tags: ["project", "C++", "JUCE", "Audio Programming", "DSP", "Synthesizer"]
 #externalUrl: ""
 #showSummary: true
-date: 2026-02-25
+date: 2026-05-25
 draft: false
 ---
 

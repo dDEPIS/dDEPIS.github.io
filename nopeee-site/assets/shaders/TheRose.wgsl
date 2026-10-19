@@ -25,7 +25,7 @@ const ENABLE_CREVICE_TENTACLES = true; // Rising green tentacles sprouting from 
 const ENABLE_ROOT_NETWORK      = true; // Heightmap root arteries and web on the ground
 const ENABLE_SHADOWS           = true; // Soft shadow raymarch pass
 const ENABLE_VOLUMETRIC_GLOW   = true; // Per-step glow accumulation in the raymarch loop
-const ENABLE_WILD_EVENT        = true; // Periodic monster tentacle & brick-alignment event
+const ENABLE_WILD_EVENT        = true; // Periodic monster tentacle, rose frenzy & brick-alignment event
 
 // Ground & Brick Sub-Features
 const ENABLE_TEXTURED_GROUND   = true; // Master switch for brick geometry & materials
@@ -39,13 +39,18 @@ const ENABLE_GROUND_FBM_MAT    = true; // 3x 4-octave FBM noise for moss/dirt/ro
 // Tunables. Anything worth poking at lives up here.
 // ---------------------------------------------------------------------------
 
-// Wild Monster Event Tunables
+// Falling Petal Point Lights on the Floor
+const PETAL_FLOOR_LIGHT_INTENSITY = 2.2;  // Strength of the point lights cast by falling petals (was 1.5)
+const PETAL_FLOOR_LIGHT_RADIUS    = 0.42; // Radius of the point light glow on the bricks (was 0.35)
+
+// Wild Event Tunables
 const WILD_EVENT_PERIOD        = 20.0; // Seconds between each wild event cycle
-const WILD_EVENT_DURATION      = 6.5;  // How many seconds the event takes to ramp up, peak, and fade
-const WILD_HOLE_LENGTH_MULT    = 1.45; // How much longer the main rose-hole tentacles reach
-const WILD_HOLE_WRITHE_MULT    = 3.2;  // Thrashing multiplier for the main rose-hole tentacles
-const WILD_CREVICE_HEIGHT_MULT = 1.5;  // Height multiplier for the green root tentacles
-const WILD_CREVICE_SWAY_MULT   = 3.0;  // Thrashing multiplier for the green root tentacles
+const WILD_EVENT_DURATION      = 6.0;  // How many seconds the event takes to ramp up, peak, and fade
+const WILD_TENTACLE_THIN_MULT  = 0.70; // Slight thinning multiplier for tentacles during the event
+const WILD_HOLE_WRITHE_MULT    = 2.2;  // Thrashing multiplier for the visible rose-hole tentacles
+const WILD_CREVICE_SWAY_MULT   = 2.1;  // Thrashing multiplier for the visible green root tentacles
+const WILD_ROSE_SPIN_STRENGTH  = 2.8;  // How far the rose head petals spin/whip around during the event
+const WILD_ROSE_JITTER_AMOUNT  = 0.05; // How much the rose head petals shift outward during the event
 
 // Camera. pitch/yaw come from the mouse; these set the resting pose.
 const CAM_RADIUS     = 2.0;   // distance out from the flower
@@ -54,18 +59,16 @@ const CAM_PITCH      = 0.5;   // base tilt before the mouse offset
 const CAM_PITCH_GAIN = 0.1;   // how much vertical mouse move tilts the view
 
 // Raymarch. STEP_SCALE under-relaxes each step: below 1.0 is safer on the
-// warped/gooey surfaces here but costs more steps. Push it up for speed at
-// the risk of the marcher tearing through the soft displacement.
-const STEP_SCALE = 0.3;
-const SURF_EPS   = 0.001;   // distance that counts as a hit
+// warped/gooey surfaces here but costs more steps.
+const STEP_SCALE = 0.42;
+const SURF_EPS   = 0.0012;  // distance that counts as a hit
 const MAX_DIST   = 20.0;    // bail once a ray gets this far out
 const NORMAL_EPS = 0.002;   // sample spread for the shading normal
 
-// Per-tier step budgets. Fewer steps is faster, but far/grazing rays give up
-// sooner; the distance fog hides most of that here.
-const STEPS_LOW    : i32 = 200;
-const STEPS_MEDIUM : i32 = 230;
-const STEPS_HIGH   : i32 = 250;
+// Per-tier step budgets.
+const STEPS_LOW    : i32 = 140;
+const STEPS_MEDIUM : i32 = 165;
+const STEPS_HIGH   : i32 = 185;
 const SHADOW_STEPS : i32 = 16;
 
 // Key light.
@@ -82,14 +85,15 @@ const COLOR_RED   = vec3f(0.298, 0.078, 0.075) * 0.5;
 const COLOR_WHITE = vec3f(0.8, 0.722, 0.722) * 0.5;
 
 // Material ids, packed into the .y of every distance result.
-const MAT_GROUND   = 0.0;
-const MAT_STEM     = 1.0;
-const MAT_ROSE     = 2.0;
-const MAT_HOLE     = 3.0;
-const MAT_DISSOLVE = 4.0;
-const MAT_THORNS   = 5.0;
-const MAT_LEAVES   = 6.0;
-const MAT_TENTACLE = 7.0;
+const MAT_GROUND        = 0.0;
+const MAT_STEM          = 1.0;
+const MAT_ROSE          = 2.0;
+const MAT_HOLE          = 3.0;
+const MAT_DISSOLVE      = 4.0;
+const MAT_THORNS        = 5.0;
+const MAT_LEAVES        = 6.0;
+const MAT_TENTACLE      = 7.0;
+const MAT_FALLING_PETAL = 8.0;
 
 // ---------------------------------------------------------------------------
 // Ground Texture Macros
@@ -132,6 +136,7 @@ const MAT_PROP_MOSS         = vec2f(5.0,  0.2);
 const MAT_PROP_MORTAR       = vec2f(80.0, 0.02);
 
 // Crevice Tentacles & Heightmap Root Network
+const VINES_MAX_RADIUS         = 8.5;   // Large outer radius where ground vines/roots smoothly fade out
 const ROOT_HEIGHT              = 0.015; // Heightmap elevation of the surface roots
 const ROOT_THICKNESS           = 0.010; // Base width of the surface roots
 const TENTACLE_ROOT_THICK_MULT = 2.0;   // 1.0 = tentacle base matches the exact root width it grows from
@@ -145,7 +150,7 @@ fn extras_enabled() -> bool {
     return uniforms.quality >= 0.5;
 }
 
-// Smooth 0.0 -> 1.0 -> 0.0 envelope for the periodic monster event
+// Smooth 0.0 -> 1.0 -> 0.0 envelope for the periodic wild event
 fn getWildEventFactor(time: f32) -> f32 {
     if (!ENABLE_WILD_EVENT) { return 0.0; }
     let cycle_t = time % WILD_EVENT_PERIOD;
@@ -234,7 +239,7 @@ fn getBrickData(p_xz: vec2f) -> vec3f {
     var warped_xz = p_xz;
     let wild = getWildEventFactor(uniforms.time);
 
-    // 1. Low-frequency domain warp: smoothly shifts to 0.0 during the wild event so stones lock into a perfect grid
+    // 1. Low-frequency domain warp: goes to 0.0 during the wild event so stones align into a perfect shape, then comes back
     if (ENABLE_BRICK_WARP) {
         let warp = vec2f(
             noise2D(p_xz * BRICK_WARP_FREQ),
@@ -276,12 +281,12 @@ fn getBrickData(p_xz: vec2f) -> vec3f {
         d = sdHexagon(local_p, r) - BRICK_CORNER_RADIUS;
     }
 
-    // 2. High-frequency inward edge chipping (strictly >= 0 so mortar boundaries never clip)
-    if (ENABLE_BRICK_CHIPS) {
+    // 2. High-frequency inward edge chipping (only evaluated near brick edges where it affects bevel/mortar)
+    if (ENABLE_BRICK_CHIPS && abs(d) < 0.09) {
         let n1 = noise2D(p_xz * BRICK_CHIP_FREQ);
         let n2 = noise2D(p_xz * BRICK_CHIP_FREQ * 2.17 + vec2f(31.4, 15.9));
         let chip_noise = smoothstep(0.25, 0.85, n1 * 0.65 + n2 * 0.35);
-        d += chip_noise * BRICK_CHIP_AMOUNT * mix(1.0, 0.25, wild);
+        d += chip_noise * BRICK_CHIP_AMOUNT;
     }
 
     return vec3f(d, cell_id.x, cell_id.y);
@@ -323,33 +328,34 @@ fn getRootDistance2D(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
 
 // Returns the local half-width of the root network at distance r from the center
 fn getRootLocalWidth(r: f32) -> f32 {
-    let dist_fade = smoothstep(4.5, 4.0, r);
-    return ROOT_THICKNESS * (0.5 + 0.5 * dist_fade);
+    let inner_fade = smoothstep(4.5, 4.0, r);
+    let outer_fade = smoothstep(VINES_MAX_RADIUS, VINES_MAX_RADIUS - 2.0, r);
+    return ROOT_THICKNESS * (0.5 + 0.5 * inner_fade) * outer_fade;
 }
 
 // Continuous, loop-free heightmap root network radiating from the center rose
 fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
+    if (r >= VINES_MAX_RADIUS) { return 0.0; }
     let d_roots = getRootDistance2D(p_xz, r, a, time);
     let width = getRootLocalWidth(r);
 
     // Parabolic cylindrical profile for the heightmap
-    let norm_d = clamp(d_roots / max(width, 0.001), 0.0, 1.0);
+    let norm_d = clamp(d_roots / max(width, 0.0005), 0.0, 1.0);
     let profile = (1.0 - norm_d * norm_d);
+    let outer_fade = smoothstep(VINES_MAX_RADIUS, VINES_MAX_RADIUS - 2.0, r);
 
-    return profile * profile * ROOT_HEIGHT;
+    return profile * profile * ROOT_HEIGHT * outer_fade;
 }
 
 // Small, chaotic tentacles that sprout directly from the root network and inherit its thickness
-fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
-    let wild = getWildEventFactor(time);
-    let current_max_height = CREVICE_MAX_HEIGHT * mix(1.0, WILD_CREVICE_HEIGHT_MULT, wild);
-
+fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32) -> vec2f {
     // Fast bounding plane: skip the 2x2 loop completely when the ray is above the tentacles
-    let max_y = -0.5 + current_max_height + 0.15;
+    let max_y = -0.5 + CREVICE_MAX_HEIGHT + 0.15;
     if (p.y > max_y) {
         return vec2f(p.y - max_y + 0.1, MAT_LEAVES);
     }
 
+    let wild = getWildEventFactor(time);
     let spacing = CREVICE_DOMAIN_SIZE;
     let cell = floor(p.xz / spacing);
     let local_p = fract(p.xz / spacing) - 0.5;
@@ -358,23 +364,33 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
     var d_min = 100.0;
     var mat_id = MAT_LEAVES;
     let PI = 3.14159265;
+    let relax = mix(0.75, 0.62, wild);
+    let cutoff_dist = best_d / relax;
 
     // 2x2 neighbor check to prevent ray tearing when shifting objects across cells
     for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
         for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
             let neighbor_offset = vec2f(i, j) * sign_p;
             let current_cell = cell + neighbor_offset;
+            let cell_center = (current_cell + 0.5) * spacing;
+
+            // If this neighbor cell is already further away than our closest hit (best_d or d_min), skip it!
+            let cell_min_dist = length(p.xz - cell_center) - spacing * 0.85;
+            if (cell_min_dist > min(d_min, cutoff_dist)) {
+                continue;
+            }
 
             // Generate two distinct random seeds based on the cell coordinate
             let seed1 = hash12(current_cell);
             let seed2 = hash12(current_cell + vec2f(13.3, 41.5));
 
-            let cell_center = (current_cell + 0.5) * spacing;
             let offset = (vec2f(seed1, seed2) - 0.5) * (spacing * CREVICE_SHIFT_AMOUNT);
             let raw_xz = cell_center + offset;
 
-            // Analytically pull the candidate point onto the nearest radial root artery
             let r_raw = max(length(raw_xz), 0.001);
+            if (r_raw >= VINES_MAX_RADIUS) { continue; }
+
+            // Analytically pull the candidate point onto the nearest radial root artery
             let a_raw = atan2(raw_xz.y, raw_xz.x);
             let wave1 = sin(r_raw * 3.5 - time * 0.05 + sin(a_raw * 3.0) * 1.2) * 0.45;
             let wave2 = cos(r_raw * 4.5 + time * 0.05 + cos(a_raw * 4.0) * 1.2) * 0.45;
@@ -399,38 +415,38 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
             let local_root_width = getRootLocalWidth(r);
 
             // How centered the sprout is on the root section (1.0 at center of root, 0.0 at edge)
-            let root_norm = clamp(root_d / max(local_root_width, 0.001), 0.0, 1.0);
+            let root_norm = clamp(root_d / max(local_root_width, 0.0005), 0.0, 1.0);
             let root_section_factor = sqrt(max(0.0, 1.0 - root_norm * root_norm));
 
             if (root_section_factor > 0.05) {
-                // Fade them out near the center dirt hole
+                // Fade them out near the center dirt hole and at the outer VINES_MAX_RADIUS circle
                 let hole_size = 0.5 + sin(time * 0.3) * 0.2;
                 let hole_mask = smoothstep(hole_size * 0.7, hole_size * 1.0, r);
-                let final_growth = root_section_factor * hole_mask;
+                let outer_fade = smoothstep(VINES_MAX_RADIUS, VINES_MAX_RADIUS - 2.0, r);
+                let final_growth = root_section_factor * hole_mask * outer_fade;
 
                 if (final_growth > 0.01) {
                     // Anchor base at y = -0.5 so it merges cleanly out of the root ridges
                     var q = vec3f(p.x - root_xz.x, p.y - (-0.5), p.z - root_xz.y);
 
-                    // Randomize height per-tentacle (surges taller during the wild monster event)
-                    let height_rand = mix(0.4 + seed1 * 0.6, 0.8 + seed1 * 0.3, wild);
-                    let max_h = current_max_height * final_growth * height_rand;
+                    // Keep the exact original height so no new/taller tentacles spawn
+                    let max_h = CREVICE_MAX_HEIGHT * final_growth * (0.4 + seed1 * 0.6);
                     let h = clamp(q.y, 0.0, max_h);
 
-                    // Calm sway vs. frenzied high-frequency monster thrashing
+                    // Calm sway vs. frenzied high-frequency thrashing on existing tentacles
                     let calm_x = sin(time * 6.0 + seed1 * 700.0 + h * 12.0 * seed2) * 0.2 * h * seed1;
                     let calm_z = cos(time * 5.1 + seed2 * 500.0 + h * 11.0 * seed1) * 0.2 * h * seed2;
 
-                    let monster_x = (sin(time * 17.0 + seed1 * 700.0 + h * 22.0) + 0.5 * cos(time * 23.0 - h * 15.0 + seed2 * 300.0)) * 0.14 * WILD_CREVICE_SWAY_MULT * h;
-                    let monster_z = (cos(time * 15.5 + seed2 * 500.0 + h * 20.0) + 0.5 * sin(time * 21.0 - h * 14.0 + seed1 * 400.0)) * 0.14 * WILD_CREVICE_SWAY_MULT * h;
+                    let wild_x = (sin(time * 16.0 + seed1 * 700.0 + h * 18.0) + 0.4 * cos(time * 22.0 - h * 14.0 + seed2 * 300.0)) * 0.16 * WILD_CREVICE_SWAY_MULT * h * (0.4 + 0.6 * seed1);
+                    let wild_z = (cos(time * 14.5 + seed2 * 500.0 + h * 16.0) + 0.4 * sin(time * 20.0 - h * 13.0 + seed1 * 400.0)) * 0.16 * WILD_CREVICE_SWAY_MULT * h * (0.4 + 0.6 * seed2);
 
-                    let sway_x = mix(calm_x, monster_x, wild);
-                    let sway_z = mix(calm_z, monster_z, wild);
+                    let sway_x = mix(calm_x, wild_x, wild);
+                    let sway_z = mix(calm_z, wild_z, wild);
 
                     let core = vec3f(sway_x, h, sway_z);
                     
-                    // Inherit the cross-sectional thickness of the root section, swelling during the wild event
-                    let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, 1.45, wild);
+                    // Inherit root thickness, narrowing slightly during the wild event
+                    let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, WILD_TENTACLE_THIN_MULT, wild);
                     let thickness = inherited_base_r * (1.0 - (h / max_h));
                     let d = length(q - core) - thickness;
 
@@ -443,8 +459,8 @@ fn sdCreviceTentacles(p: vec3f, time: f32) -> vec2f {
         }
     }
     
-    // Under-relax slightly more during the wild event to handle steep corkscrews safely
-    return vec2f(d_min * mix(0.75, 0.58, wild), mat_id); 
+    // Under-relax slightly more during the wild event to handle steep bends safely
+    return vec2f(d_min * relax, mat_id); 
 }
 
 fn getGroundHeight(p_xz: vec2f) -> f32 {
@@ -460,13 +476,15 @@ fn getGroundHeight(p_xz: vec2f) -> f32 {
     let brick_var = 1.0 + (hash12(brick_id + vec2f(7.1, 19.3)) - 0.5) * BRICK_HEIGHT_VAR;
     height_mask *= brick_var;
 
-    // 2. Surface craters and pits etched into the top of the bricks
-    if (ENABLE_BRICK_HOLES) {
+    // 2. Surface craters and pits etched into the top of the bricks (skipped when in mortar where height_mask == 0)
+    if (ENABLE_BRICK_HOLES && height_mask > 0.001) {
         let pit_n1 = noise2D(p_xz * BRICK_HOLE_FREQ + vec2f(12.3, 45.6));
-        let pit_n2 = noise2D(p_xz * BRICK_HOLE_FREQ * 2.3 + vec2f(67.8, 23.4));
-        let holes = smoothstep(0.58, 0.88, pit_n1 * 0.7 + pit_n2 * 0.3);
-        let hole_mask = holes * smoothstep(0.0, 0.4, height_mask);
-        height_mask = max(0.0, height_mask - hole_mask * BRICK_HOLE_DEPTH);
+        if (pit_n1 > 0.38) {
+            let pit_n2 = noise2D(p_xz * BRICK_HOLE_FREQ * 2.3 + vec2f(67.8, 23.4));
+            let holes = smoothstep(0.58, 0.88, pit_n1 * 0.7 + pit_n2 * 0.3);
+            let hole_mask = holes * smoothstep(0.0, 0.4, height_mask);
+            height_mask = max(0.0, height_mask - hole_mask * BRICK_HOLE_DEPTH);
+        }
     }
 
     return height_mask * BRICK_HEIGHT;
@@ -546,7 +564,7 @@ fn smax(a: f32, b: f32, k: f32) -> f32 {
     return mix(a, b, h) + k * h * (1.0 - h);
 }
 
-// ring of writhing tentacles around the hole (erupts into monster tentacles during the wild event)
+// ring of writhing tentacles around the hole (no artificial bounding circle wall so shadows stay clean!)
 fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let wild = getWildEventFactor(time);
     let repetitions = 11.0;
@@ -569,31 +587,31 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let advanced_angle = cycle_angle + 0.007;
     let retract_blend = smoothstep(0.05, -0.05, cos(advanced_angle));
 
+    // Keep the exact original spawn_phase & growth_factor so no extra tentacles appear
     let spawn_phase = sin(cycle_angle);
-    // Force all 11 tentacles to erupt to full size simultaneously during the wild event
-    let growth_factor = mix(smoothstep(-0.2, 0.6, spawn_phase), 1.0, wild);
+    let growth_factor = smoothstep(-0.2, 0.6, spawn_phase);
 
     if (growth_factor < 0.01) {
         return vec2f(100.0, MAT_HOLE);
     }
 
-    let max_length = 2.2 * mix(1.0, WILD_HOLE_LENGTH_MULT, wild) * growth_factor;
+    let max_length = 2.2 * growth_factor;
     let h = clamp(q.x, 0.0, max_length);
 
     let base_arch = h * 1.2 - (h * h * 0.35);
     let tip_mask = smoothstep(max_length * 0.6, max_length, h);
-    let tip_lift = pow(tip_mask, 2.0) * mix(0.7, 1.45, wild);
+    let tip_lift = pow(tip_mask, 2.0) * 0.7;
 
     let arch_y = base_arch + tip_lift;
     let phase = sector * 13.5;
 
-    let move_mask = smoothstep(0.15, max_length, h);
+    let move_mask = smoothstep(0.2, max_length, h);
     let calm_wy = sin(time * 4.0 + h * 6.0 + phase) * 0.15;
     let calm_wz = cos(time * 3.1 + h * 5.0 + phase) * 0.15;
 
-    // Violent multi-wave monster thrashing
-    let wild_wy = (sin(time * 13.0 + h * 9.0 + phase) + 0.5 * cos(time * 19.0 - h * 12.0 + phase)) * 0.11 * WILD_HOLE_WRITHE_MULT;
-    let wild_wz = (cos(time * 11.5 + h * 8.0 + phase) + 0.5 * sin(time * 17.5 - h * 11.0 + phase)) * 0.11 * WILD_HOLE_WRITHE_MULT;
+    // Fast, chaotic monster thrashing on the already-visible tentacles
+    let wild_wy = (sin(time * 13.5 + h * 9.0 + phase) + 0.45 * cos(time * 19.0 - h * 11.0 + phase)) * 0.12 * WILD_HOLE_WRITHE_MULT;
+    let wild_wz = (cos(time * 12.0 + h * 8.0 + phase) + 0.45 * sin(time * 17.5 - h * 10.0 + phase)) * 0.12 * WILD_HOLE_WRITHE_MULT;
 
     let writhe_y = mix(calm_wy, wild_wy, wild) * move_mask;
     let writhe_z = mix(calm_wz, wild_wz, wild) * move_mask;
@@ -609,8 +627,10 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let bumps = sin(h * 30.0 - time * 5.0) * cos(angle_around * 5.0);
 
     let taper = 1.0 - (h / max_length);
-    let base_thickness = mix(0.06, 0.088, wild) * growth_factor * taper;
-    let gooey_thickness = base_thickness + (muscle_lobes * mix(0.02, 0.032, wild) * taper) + (bumps * mix(0.005, 0.012, wild) * taper);
+    // Make the tentacles slightly thinner during the wild event
+    let thin_scale = mix(1.0, WILD_TENTACLE_THIN_MULT, wild);
+    let base_thickness = 0.06 * thin_scale * growth_factor * taper;
+    let gooey_thickness = base_thickness + (muscle_lobes * 0.02 * thin_scale * taper) + (bumps * 0.005 * taper);
 
     let d = length(q - core_line) - gooey_thickness;
 
@@ -622,10 +642,10 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     if (lobe_id == 1.0) {
         lobe_mat = MAT_STEM;
     } else if (lobe_id == 2.0) {
-        lobe_mat = MAT_TENTACLE + clamp(mix(retract_blend, 0.95, wild), 0.0, 0.99);
+        lobe_mat = MAT_TENTACLE + clamp(retract_blend, 0.0, 0.99);
     }
 
-    return vec2f(d * mix(0.45, 0.35, wild), lobe_mat);
+    return vec2f(d * mix(0.45, 0.38, wild), lobe_mat);
 }
 
 // one rose petal
@@ -668,15 +688,15 @@ fn sdPetal(p: vec3f, s: f32) -> f32 {
     return min(max(w.x, w.y), 0.0) + length(max(w, vec2f(0.0)));
 }
 
-// petals drifting down and dissolving on the ground
-fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
+// petals drifting down and dissolving everywhere across the ground
+fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
     let spacing = 2.0;
     let cell = floor(p.xz / spacing);
     let local_p = fract(p.xz / spacing) - 0.5;
     let sign_p = sign(local_p);
 
     var d_min: f32 = 100.0;
-    var final_mat: f32 = MAT_ROSE;
+    var final_mat: f32 = MAT_FALLING_PETAL;
 
     for (var i: f32 = 0.0; i <= 1.0; i += 1.0) {
         for (var j: f32 = 0.0; j <= 1.0; j += 1.0) {
@@ -696,7 +716,6 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             let ground_y = -0.45;
             let ground_dist = virtual_drop_y - ground_y;
 
-            var dissolve_progress = smoothstep(12.0, 19.0, local_time);
             let size = 0.1 + seed * 0.04;
 
             var actual_y: f32 = virtual_drop_y;
@@ -716,6 +735,18 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
             q.x += sin(time * 1.5 + seed * 10.0) * 0.25 * wind_damp;
             q.z += cos(time * 1.2 + seed2 * 10.0) * 0.25 * wind_damp;
 
+            // Fast per-petal sphere bound: skip 3D rotations, exp(), and noise when ray is far from this petal
+            let d_sphere = (length(q) - size * 1.05) * 0.6;
+            if (d_sphere >= min(d_min, best_d)) {
+                continue;
+            }
+            if (d_sphere > 0.16) {
+                d_min = d_sphere;
+                final_mat = MAT_FALLING_PETAL;
+                continue;
+            }
+
+            var dissolve_progress = smoothstep(12.0, 19.0, local_time);
             let resting_dist = max(0.0, actual_y - ground_y);
 
             let target_rot_x = 1.57;
@@ -753,12 +784,12 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
                     } else {
                         let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                         let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
-                        final_mat = MAT_ROSE + gradient;
+                        final_mat = MAT_FALLING_PETAL + gradient;
                     }
                 } else {
                     let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                     let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
-                    final_mat = MAT_ROSE + gradient;
+                    final_mat = MAT_FALLING_PETAL + gradient;
                 }
             }
         }
@@ -766,9 +797,14 @@ fn sdFallingPetals(p: vec3f, time: f32) -> vec2f {
     return vec2f(d_min, final_mat);
 }
 
-// rose head: petals on a golden-angle spiral
+// rose head: petals on a golden-angle spiral (spins and flutters rapidly during the wild event)
 fn sdRose(p: vec3f) -> vec2f {
-    let d_sphere = length(p - vec3f(0.0, 0.1, 0.0)) - 0.3;
+    let raw_time = uniforms.time;
+    let wild = getWildEventFactor(raw_time);
+
+    // Expand bounding sphere slightly during the wild event so fluttering petals aren't clipped
+    let bound_r = mix(0.3, 0.44, wild);
+    let d_sphere = length(p - vec3f(0.0, 0.1, 0.0)) - bound_r;
 
     if (d_sphere > 0.05) {
         return vec2f(d_sphere, MAT_ROSE);
@@ -777,20 +813,26 @@ fn sdRose(p: vec3f) -> vec2f {
     var d_min = 100.0;
     let petal_count = 15.0;
     let golden_angle = 2.39996;
-    let time = uniforms.time * 2.0;
+    let time = raw_time * 2.0;
 
     for (var i: f32 = 1.0; i < 15.0; i += 1.0) {
-        let r = (0.01) * sqrt(i);
-        let theta = i * golden_angle;
+        let r = (0.01) * sqrt(i) + wild * WILD_ROSE_JITTER_AMOUNT * (0.5 + 0.5 * sin(raw_time * 14.0 + i * 2.1));
 
-        let petal_center = vec3f(r * cos(theta), -r * 0.2, r * sin(theta));
+        // Fast chaotic petal rotation & swirling around the rose core during the wild event
+        let wild_spin = (sin(raw_time * 9.0 + i * 0.6) + 0.5 * cos(raw_time * 15.0 - i * 1.1)) * WILD_ROSE_SPIN_STRENGTH * wild;
+        let theta = i * golden_angle + wild_spin;
+
+        let wild_y_jitter = cos(raw_time * 12.0 + i * 1.7) * (WILD_ROSE_JITTER_AMOUNT * 0.7) * wild;
+        let petal_center = vec3f(r * cos(theta), -r * 0.2 + wild_y_jitter, r * sin(theta));
         let scale = 0.1 + (i / petal_count) * 0.25;
 
         var q = p - petal_center;
         q = opRotateY(q, -theta + 1.57);
 
-        let tilt = -0.3 + (i / petal_count) * (0.9 + sin(time) * 0.15);
-        q = opRotateX(q, -tilt);
+        let calm_tilt = -0.3 + (i / petal_count) * (0.9 + sin(time) * 0.15);
+        let wild_tilt = calm_tilt + sin(raw_time * 16.0 + i * 2.3) * 0.55 * wild;
+        q = opRotateX(q, -wild_tilt);
+        q = opRotateZ(q, cos(raw_time * 13.0 + i * 1.5) * 0.35 * wild);
         q = q / 0.2;
 
         let pivot_offset = vec3f(0.0, 0.7, 0.0);
@@ -802,7 +844,7 @@ fn sdRose(p: vec3f) -> vec2f {
     let dist_from_center = max(length(p + vec3f(0.0, 0.1, 0.0)) - 0.05, 0.0);
     let gradient = clamp(dist_from_center * 3.5, 0.0, 0.99);
 
-    return vec2f(d_min, MAT_ROSE + gradient);
+    return vec2f(d_min * mix(1.0, 0.75, wild), MAT_ROSE + gradient);
 }
 
 // leaf blade on a short bent petiole
@@ -854,23 +896,24 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     let straightness_mask = pow((1.0 - h), 0.8);
     let offset_dir = vec3f(bend, 0.0, bend * 0.2);
 
-    // Add a writhing serpentine shudder to the rose stem during the wild event
+    // Subtle stem shudder during the wild event
     let wild_stem_wave = vec3f(
-        sin(time * 12.0 + h * 14.0) * 0.08,
+        sin(time * 12.0 + h * 14.0) * 0.04,
         0.0,
-        cos(time * 11.0 + h * 12.0) * 0.08
+        cos(time * 11.0 + h * 12.0) * 0.04
     ) * h * (1.0 - h) * 4.0 * wild;
 
     let current_offset = offset_dir * wiggle * straightness_mask + wild_stem_wave;
 
     let pos_on_line = a + ba * h + current_offset;
     let stem_radius = r * (1.0 - h * 0.4);
+    let dist_to_stem = length(p - pos_on_line);
 
-    let d_stem = (length(p - pos_on_line) - stem_radius) * 0.6;
+    let d_stem = (dist_to_stem - stem_radius) * 0.6;
 
     var d_spine = 100.0;
 
-    if (length(p - pos_on_line) < 0.2 && h > 0.1 && h < 0.9) {
+    if (dist_to_stem < 0.2 && h > 0.1 && h < 0.9) {
         let density = 15.0;
         let id = floor(h * density);
         let local_y = (fract(h * density) - 0.5) * (ba_length / density);
@@ -887,7 +930,8 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
 
     var d_leaf = 100.0;
 
-    if (length(p - pos_on_line) < 0.9) {
+    // Leaves reach at most 0.38 from the stem axis; culling at 0.46 saves 75% of leaf evaluations
+    if (dist_to_stem < 0.46) {
         let leaf_density = 4.5;
         let id = floor(h * leaf_density);
 
@@ -900,8 +944,8 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
 
             p_l.x -= (stem_radius - 0.01);
 
-            let wind_sway = mix(sin(time * 3.5 + id * 1.2) * 0.07, sin(time * 14.0 + id * 1.2) * 0.22, wild);
-            let wind_twist = mix(cos(time * 2.8 + id * 1.5) * 0.05, cos(time * 12.0 + id * 1.5) * 0.18, wild);
+            let wind_sway = mix(sin(time * 3.5 + id * 1.2) * 0.07, sin(time * 14.0 + id * 1.2) * 0.18, wild);
+            let wind_twist = mix(cos(time * 2.8 + id * 1.5) * 0.05, cos(time * 12.0 + id * 1.5) * 0.15, wild);
 
             let droop_angle = 0.3 - (id * 0.2) + wind_sway;
             p_l = opRotateZ(p_l, droop_angle);
@@ -943,7 +987,7 @@ fn sdSpine(p: vec3f) -> f32 {
 
 // assembles the flower: stem, sepals, bud and rose head
 fn flower(p: vec3f, location: vec3f) -> vec2f {
-    let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.4;
+    let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.45;
 
     if (d_sphere > 1.3) {
         return vec2f(d_sphere, 0.0);
@@ -1055,7 +1099,7 @@ fn getPetalFloorEffects(p: vec3f, time: f32) -> vec3f {
                 let shadow_opacity = smoothstep(1.5, 0.0, height_above_floor) * 0.8;
                 total_shadow += shadow_softness * shadow_opacity * dissolve_fade;
 
-                let light_radius = 0.35;
+                let light_radius = PETAL_FLOOR_LIGHT_RADIUS;
                 let light_softness = smoothstep(light_radius, 0.0, dist_to_petal_2d);
                 let light_opacity = smoothstep(1.5, 0.0, height_above_floor);
 
@@ -1097,8 +1141,8 @@ fn map(p_in: vec3f) -> vec2f {
         // Add brick height, fading it out smoothly as it enters the center hole
         ground_height += getGroundHeight(p.xz) * (1.0 - hole_mask);
 
-        // Add the continuous heightmap root network directly onto the ground height
-        if (ENABLE_ROOT_NETWORK) {
+        // Add the continuous heightmap root network directly onto the ground height (within VINES_MAX_RADIUS)
+        if (ENABLE_ROOT_NETWORK && r < VINES_MAX_RADIUS) {
             let root_h = getRootHeight(p.xz, r, a, time) * (1.0 - hole_mask * 0.5);
             ground_height += root_h;
             if (root_h > 0.002) {
@@ -1124,8 +1168,10 @@ fn map(p_in: vec3f) -> vec2f {
     let core_radius = hole_size * 0.55;
 
     var d_core = length(p - core_center) - core_radius;
-    let core_noise = sin(p.x * 40.0 + time * 4.0) * sin(p.y * 40.0 - time * 2.0) * sin(p.z * 40.0 + time * 3.5) * 0.04;
-    d_core = (d_core + core_noise) * 0.5;
+    if (d_core < 0.25) {
+        let core_noise = sin(p.x * 40.0 + time * 4.0) * sin(p.y * 40.0 - time * 2.0) * sin(p.z * 40.0 + time * 3.5) * 0.04;
+        d_core = (d_core + core_noise) * 0.5;
+    }
 
     if (d_core < res.x) {
         res = vec2f(d_core, MAT_HOLE);
@@ -1138,9 +1184,9 @@ fn map(p_in: vec3f) -> vec2f {
         }
     }
 
-    // Upward tentacles connected to the root network
-    if (ENABLE_TEXTURED_GROUND && ENABLE_ROOT_NETWORK && ENABLE_CREVICE_TENTACLES) {
-        let mini_tentacles = sdCreviceTentacles(p, time);
+    // Upward tentacles connected to the root network (smoothly limited to VINES_MAX_RADIUS)
+    if (ENABLE_TEXTURED_GROUND && ENABLE_ROOT_NETWORK && ENABLE_CREVICE_TENTACLES && r < VINES_MAX_RADIUS + 0.5) {
+        let mini_tentacles = sdCreviceTentacles(p, time, res.x);
         if (mini_tentacles.x < res.x) {
             res = mini_tentacles;
         }
@@ -1156,7 +1202,7 @@ fn map(p_in: vec3f) -> vec2f {
     }
 
     if (ENABLE_FALLING_PETALS) {
-        let res_petals = sdFallingPetals(p, time);
+        let res_petals = sdFallingPetals(p, time, res.x);
         if (res_petals.x < res.x) {
             res = res_petals;
         }
@@ -1165,18 +1211,18 @@ fn map(p_in: vec3f) -> vec2f {
     return res;
 }
 
-// surface normal via central differences
+// 4-sample Tetrahedral Normal (33% fewer map() calls than 6-sample central differences)
 fn calc_normal(p: vec3f) -> vec3f {
-    let e = NORMAL_EPS;
-
-    let dx = map(p + vec3f(e, 0.0, 0.0)).x - map(p - vec3f(e, 0.0, 0.0)).x;
-    let dy = map(p + vec3f(0.0, e, 0.0)).x - map(p - vec3f(0.0, e, 0.0)).x;
-    let dz = map(p + vec3f(0.0, 0.0, e)).x - map(p - vec3f(0.0, 0.0, e)).x;
-
-    return normalize(vec3f(dx, dy, dz));
+    let e = vec2f(1.0, -1.0) * 0.57735027 * NORMAL_EPS;
+    return normalize(
+        e.xyy * map(p + e.xyy).x +
+        e.yyx * map(p + e.yyx).x +
+        e.yxy * map(p + e.yxy).x +
+        e.xxx * map(p + e.xxx).x
+    );
 }
 
-// stripped-down scene for shadow rays (tentacles only)
+// stripped-down scene for shadow rays (middle hole tentacles only)
 fn map_shadow(p: vec3f) -> f32 {
     if (!ENABLE_HOLE_TENTACLES) {
         return 100.0;
@@ -1196,10 +1242,14 @@ fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
     var ph = 1e20;
     if (extras_enabled()) {
         for (var i = 0; i < SHADOW_STEPS; i++) {
-            let h = map_shadow(ro + rd * t);
+            let sample_p = ro + rd * t;
+            // Once the shadow ray climbs above the middle tentacles (y > 1.65), it has clear sky to the light
+            if (sample_p.y > 1.65) { break; }
+
+            let h = map_shadow(sample_p);
 
             let y = h * h / (2.0 * ph);
-            let d = sqrt(h * h - y * y);
+            let d = sqrt(max(0.0, h * h - y * y));
             res = min(res, k * d / max(0.0, t - y));
 
             ph = h;
@@ -1219,6 +1269,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let uv_flipped = vec2f(uv.x, -uv.y);
 
     let time = uniforms.time * 2.0;
+    let wild = getWildEventFactor(uniforms.time);
 
     let yaw = uniforms.yaw;
     let pitch = CAM_PITCH + clamp(uniforms.pitch, -1.0, 1.0) * CAM_PITCH_GAIN;
@@ -1264,11 +1315,14 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
 
             if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
                 accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
+            } else if (mat_base == MAT_FALLING_PETAL) {
+                // Falling petals lose their volumetric glow as they turn black during the wild event
+                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0)) * (1.0 - wild);
             } else if (mat_base == MAT_TENTACLE) {
                 let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
                 accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0));
             } else if (mat_base == MAT_DISSOLVE) {
-                accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac;
+                accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac * (1.0 - wild);
             } else if (mat_base == MAT_LEAVES && mat_frac > 0.0) {
                 accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
             }
@@ -1382,7 +1436,8 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 let dissolve_light = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t);
                 let final_glow_color = mix(base_light, dissolve_light, color_shift);
 
-                emission += final_glow_color * light_amt * 1.5;
+                // Boosted falling petal point lights on the ground via PETAL_FLOOR_LIGHT_INTENSITY
+                emission += final_glow_color * light_amt * PETAL_FLOOR_LIGHT_INTENSITY * (1.0 - wild);
             }
 
         } else if (abs(mat_base - MAT_STEM) < 0.1) {
@@ -1401,6 +1456,18 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             rim_light = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.95;
             emission = albedo * 0.2;
 
+        } else if (abs(mat_base - MAT_FALLING_PETAL) < 0.1) {
+            let base_color = current_dissolve_color * 0.6;
+            let tip_color = current_rose_color * 0.8;
+            let normal_albedo = mix(base_color, tip_color, smoothstep(0.0, 0.55, mat_frac));
+
+            // Drain the falling petals to black during the wild event, then restore original color
+            albedo = mix(normal_albedo, vec3f(0.005, 0.005, 0.005), wild);
+            roughness = 180.0;
+            spec_power = mix(1.2, 0.25, wild);
+            rim_light = pow(1.0 - max(dot(normal, view_dir), 0.0), 3.0) * 0.95 * (1.0 - wild);
+            emission = normal_albedo * 0.2 * (1.0 - wild);
+
         } else if (abs(mat_base - MAT_HOLE) < 0.1) {
             albedo = vec3f(0.0, 0.0, 0.0);
             roughness = 35.0;
@@ -1411,11 +1478,12 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             let tip_color = current_rose_color * 0.8;
             let glow_color = current_dissolve_color * 1.5;
 
-            albedo = mix(tip_color, glow_color, glow_intensity);
+            let normal_albedo = mix(tip_color, glow_color, glow_intensity);
+            albedo = mix(normal_albedo, vec3f(0.005, 0.005, 0.005), wild);
 
             roughness = 6.0;
             spec_power = 0.1;
-            emission = glow_color * glow_intensity * 2.5;
+            emission = glow_color * glow_intensity * 2.5 * (1.0 - wild);
 
         } else if (abs(mat_base - MAT_THORNS) < 0.1) {
             albedo = current_rose_color;
@@ -1451,7 +1519,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     if (hit) {
         let hit_mat = floor(mat_id);
 
-        if (hit_mat == MAT_ROSE || hit_mat == MAT_DISSOLVE || hit_mat == MAT_TENTACLE) {
+        if (hit_mat == MAT_ROSE || hit_mat == MAT_FALLING_PETAL || hit_mat == MAT_DISSOLVE || hit_mat == MAT_TENTACLE) {
             accumulated_glow *= 0.1;
         }
     }

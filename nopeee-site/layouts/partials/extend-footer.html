@@ -1,10 +1,27 @@
 <script type="module">
   // -----------------------------------------------------------------------
-  // 0. DEBUG & BENCHMARK MACROS
+  // 0. DEBUG, ROUTING & BENCHMARK MACROS
   // -----------------------------------------------------------------------
-  const SHOW_PERF_HUD     = false;  // Shows live FPS, ms/frame, resolution, and quality tier
-  const FORCE_MAX_QUALITY = false;  // Locks quality = 2, disables CSS blur, bypasses governor
-  const FORCE_NATIVE_RES  = false; // If true (with FORCE_MAX_QUALITY), forces 1.0x scale instead of maxFine (0.55x)
+  const SHOW_PERF_HUD            = false; // Shows live FPS, ms/frame, resolution, and quality tier
+  const FORCE_MAX_QUALITY        = false; // Locks quality = 2, disables CSS blur, bypasses governor
+  const FORCE_NATIVE_RES         = false; // If true (with FORCE_MAX_QUALITY), forces 1.0x scale instead of maxFine (0.55x)
+
+  // Default Shader Selection
+  const DEFAULT_SHADER           = "WildInTheRose"; // Locked to the Rose shader for now
+  const RANDOMIZE_DEFAULT_SHADER = false;           // Flip to true later when you want random rotation back
+
+  // Exact-match allowlist for hub/menu pages and About Me (always end with '/').
+  // Sub-pages like "/projects/my-project/" or "/articles/my-article/" will NOT match and stay shader-free.
+  const ALLOWED_MENU_ROUTES = [
+    "/",
+    "/index.html/",
+    "/about/",
+    "/projects/",
+    "/articles/",
+    "/posts/",
+    "/blog/",
+    "/digitalartwork/"
+  ];
 
   // 1. GLOBALS & INTERACTION STATE
   const inputState = {
@@ -61,7 +78,7 @@
     }
   };
 
-  // 3. ROUTING
+  // 3. DEDICATED ARTWORK ROUTING
   const ROUTE_MAP = {
     "/digitalartwork/a-wild-in-the-rose/": "WildInTheRose",
     "/digitalartwork/vaccine/": "Vaccine",
@@ -86,19 +103,30 @@
     return { reduce: mm("(prefers-reduced-motion: reduce)"), coarse: mm("(pointer: coarse)") };
   }
 
+  function pickDefaultOrRandomShader() {
+    if (RANDOMIZE_DEFAULT_SHADER) {
+      const keys = Object.keys(SHADER_REGISTRY);
+      return keys[Math.floor(Math.random() * keys.length)];
+    }
+    return DEFAULT_SHADER;
+  }
+
   async function initWebGPU() {
     if (!navigator.gpu) { console.log("WebGPU not supported"); return; }
 
+    // Normalize path so it always ends with a single '/'
     let currentPath = window.location.pathname.replace(/\/?\$/, '/'); 
     let activeKey = null;
 
-    if (currentPath === "/" || currentPath === "/index.html/") {
-      const keys = Object.keys(SHADER_REGISTRY);
-      activeKey = keys[Math.floor(Math.random() * keys.length)];
-    } else {
+    if (ROUTE_MAP[currentPath]) {
+      // 1. Dedicated artwork showcase page
       activeKey = ROUTE_MAP[currentPath];
+    } else if (ALLOWED_MENU_ROUTES.includes(currentPath)) {
+      // 2. Home screen, About Me, or top-level project/article menu pages only
+      activeKey = pickDefaultOrRandomShader();
     }
 
+    // If we are on a specific project or article page, activeKey is null and we exit immediately
     if (!activeKey || !SHADER_SOURCES[activeKey]) return; 
 
     const activeConfig = SHADER_REGISTRY[activeKey];
