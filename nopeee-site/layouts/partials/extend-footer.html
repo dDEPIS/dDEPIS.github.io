@@ -1,10 +1,18 @@
 <script type="module">
+  // Copyright (c) 2026 depis. All Rights Reserved.
   // -----------------------------------------------------------------------
-  // 0. DEBUG, ROUTING & BENCHMARK MACROS
+  // 0. DEBUG, ROUTING & UI MACROS
   // -----------------------------------------------------------------------
-  const SHOW_PERF_HUD            = false; // Shows live FPS, ms/frame, resolution, and quality tier
-  const FORCE_MAX_QUALITY        = false; // Locks quality = 2, disables CSS blur, bypasses governor
-  const FORCE_NATIVE_RES         = false; // If true (with FORCE_MAX_QUALITY), forces 1.0x scale instead of maxFine (0.55x)
+  const SHOW_PERF_HUD            = false;  // Starts hidden; unlock secretly with "fps" or 5 top-left taps
+  const SECRET_HUD_CODE          = "fps";  // Type this word on PC to toggle the Perf HUD
+  const SECRET_CORNER_TAPS       = 5;      // Tap top-left corner this many times on Phone/PC to toggle HUD
+  const FORCE_MAX_QUALITY        = false;  // Locks quality = 2.0, disables CSS blur, bypasses governor
+  const FORCE_NATIVE_RES         = false;  // If true (with FORCE_MAX_QUALITY), forces 1.0x scale instead of maxFine (0.55x)
+
+  // Subtle Interaction Hint Popup
+  const SHOW_INTERACTION_HINT    = true;    // Shows a subtle fade-in/out prompt on page load
+  const HINT_DISPLAY_MS          = 5500;    // How long (ms) the hint stays visible before fading out
+  const HINT_BOTTOM_OFFSET       = "188px"; // Moved higher so it clears bottom UI / Ko-fi widget
 
   // Default Shader Selection
   const DEFAULT_SHADER           = "WildInTheRose"; // Locked to the Rose shader for now
@@ -29,7 +37,8 @@
     targetColorT: 0.0,
     spinInput: 0.5,
     cameraPitch: 0.5,
-    cameraYaw: 0.0
+    cameraYaw: 0.0,
+    clickTime: -100.0 // Timestamp of the last left-click/tap (triggers the wild event)
   };
 
   // 2. SHADER CONFIGURATIONS
@@ -45,7 +54,7 @@
         values[4] = inputState.cameraYaw;
         values[5] = inputState.cameraPitch;
         values[6] = quality;
-        values[7] = 0.0; 
+        values[7] = inputState.clickTime; // Passed into uniforms.click_time
       }
     },
     "Vaccine": {
@@ -59,7 +68,7 @@
         values[4] = inputState.spinInput;   
         values[5] = inputState.cameraPitch; 
         values[6] = quality;
-        values[7] = 0.0;
+        values[7] = inputState.clickTime;
       }
     },
     "TheEyeYouSee": {
@@ -73,7 +82,7 @@
         values[4] = inputState.cameraYaw;
         values[5] = inputState.cameraPitch;
         values[6] = quality;
-        values[7] = 0.0;
+        values[7] = inputState.clickTime;
       }
     }
   };
@@ -94,7 +103,7 @@
 
   const GLOBAL_SETTINGS = {
     slowMs: 25.0, fastMs: 17.0, downStep: 0.040, upStep: 0.006, 
-    govWindow: 20, scaleLerp: 14.0, maxBlur: 1.0, 
+    govWindow: 20, scaleLerp: 14.0, qualityLerp: 2.8, maxBlur: 1.0, 
     spinSpeed: 0.6, minSpin: 0.2, colorFade: 3.0,
   };
 
@@ -139,6 +148,7 @@
     const { reduce, coarse } = environment();
     const maxScale = coarse ? activeConfig.maxCoarse : activeConfig.maxFine;
 
+    let showPerfHud = SHOW_PERF_HUD;
     let forceMaxQuality = FORCE_MAX_QUALITY;
     const getForcedScale = () => FORCE_NATIVE_RES ? 1.0 : maxScale;
 
@@ -155,21 +165,89 @@
       zIndex: "-1", pointerEvents: "none",
     });
 
-    // --- PERFORMANCE HUD ELEMENT ---
-    let perfHud = null;
-    if (SHOW_PERF_HUD) {
-      perfHud = document.createElement("div");
-      Object.assign(perfHud.style, {
-        position: "fixed", top: "12px", left: "12px", zIndex: "9999",
-        background: "rgba(0, 0, 0, 0.78)", color: "#00ff88",
-        fontFamily: "monospace", fontSize: "12px", lineHeight: "1.5",
-        padding: "8px 12px", borderRadius: "6px",
-        border: "1px solid rgba(0, 255, 136, 0.3)",
-        pointerEvents: "none", whiteSpace: "pre"
-      });
-      perfHud.textContent = "Measuring FPS...";
-      document.body.appendChild(perfHud);
+    // --- SUBTLE INTERACTION HINT POPUP ---
+    let hintEl = null;
+    let hintDismissed = false;
+    function dismissHint() {
+      if (!hintEl || hintDismissed) return;
+      hintDismissed = true;
+      hintEl.style.opacity = "0";
+      hintEl.style.transform = "translate(-50%, 6px)";
+      setTimeout(() => { if (hintEl && hintEl.parentNode) hintEl.remove(); }, 700);
     }
+
+    if (SHOW_INTERACTION_HINT) {
+      hintEl = document.createElement("div");
+      hintEl.textContent = coarse
+        ? "Tilt device to look around  •  Tap screen to shift"
+        : "Move mouse to look around  •  Left-click to shift";
+      Object.assign(hintEl.style, {
+        position: "fixed",
+        bottom: HINT_BOTTOM_OFFSET,
+        left: "50%",
+        transform: "translate(-50%, 8px)",
+        zIndex: "9998",
+        background: "rgba(12, 12, 14, 0.58)",
+        backdropFilter: "blur(6px)",
+        WebkitBackdropFilter: "blur(6px)",
+        color: "rgba(240, 232, 232, 0.78)",
+        fontFamily: "system-ui, -apple-system, sans-serif",
+        fontSize: "12px",
+        letterSpacing: "0.06em",
+        padding: "7px 16px",
+        borderRadius: "999px",
+        border: "1px solid rgba(255, 255, 255, 0.12)",
+        boxShadow: "0 4px 18px rgba(0, 0, 0, 0.35)",
+        pointerEvents: "none",
+        userSelect: "none",
+        whiteSpace: "nowrap",
+        opacity: "0",
+        transition: "opacity 0.6s ease, transform 0.6s ease"
+      });
+      document.body.appendChild(hintEl);
+
+      // Fade in shortly after page load, then auto-dismiss after HINT_DISPLAY_MS
+      setTimeout(() => {
+        if (!hintDismissed && hintEl) {
+          hintEl.style.opacity = "1";
+          hintEl.style.transform = "translate(-50%, 0px)";
+        }
+      }, 500);
+      setTimeout(dismissHint, HINT_DISPLAY_MS);
+    }
+
+    // --- PERFORMANCE HUD ELEMENT (Secretly Toggleable) ---
+    const perfHud = document.createElement("div");
+    Object.assign(perfHud.style, {
+      position: "fixed", top: "12px", left: "12px", zIndex: "9999",
+      background: "rgba(0, 0, 0, 0.78)", color: "#00ff88",
+      fontFamily: "monospace", fontSize: "12px", lineHeight: "1.5",
+      padding: "8px 12px", borderRadius: "6px",
+      border: "1px solid rgba(0, 255, 136, 0.3)",
+      cursor: "pointer", userSelect: "none", whiteSpace: "pre",
+      display: showPerfHud ? "block" : "none"
+    });
+    perfHud.textContent = "Measuring FPS...";
+    document.body.appendChild(perfHud);
+
+    function toggleMaxQualityMode() {
+      forceMaxQuality = !forceMaxQuality;
+      if (forceMaxQuality) {
+        targetScale = getForcedScale();
+      }
+    }
+
+    function setPerfHudVisible(visible) {
+      showPerfHud = visible;
+      perfHud.style.display = showPerfHud ? "block" : "none";
+    }
+
+    // Tapping/clicking directly on the HUD box toggles Max Quality (great for mobile testing)
+    perfHud.addEventListener("pointerup", (e) => {
+      e.stopPropagation();
+      if (!showPerfHud) return;
+      toggleMaxQualityMode();
+    });
 
     const context = canvas.getContext("webgpu");
     const format = navigator.gpu.getPreferredCanvasFormat();
@@ -200,22 +278,42 @@
     }
 
     // -----------------------------------------------------------------------
-    // --- INTERACTION STATE LISTENERS (WITH NON-LINEAR CURVE) ---
+    // --- INTERACTION & SECRET HUD LISTENERS ---
     // -----------------------------------------------------------------------
     let pressX = 0, pressY = 0;
-    let usingTilt = false; 
+    let usingTilt = false;
+    let keyBuffer = "";
+    let cornerTapCount = 0;
+    let lastCornerTapTime = 0;
 
-    const toggleColor = () => { inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0; };
+    // Triggers both the color crossfade and the shader's wild event
+    const triggerShiftAndWild = () => {
+      inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0;
+      inputState.clickTime = performance.now() / 1000;
+      dismissHint();
+    };
+
     window.addEventListener("keydown", (e) => {
+      // Ignore keystrokes when typing inside an input field
+      if (e.target && e.target.closest && e.target.closest("input, textarea, select")) return;
+
       const k = e.key.toLowerCase();
-      if (k === "c") toggleColor();
-      // Press 'Q' at any time to toggle forced max quality vs adaptive governor
-      if (k === "q") {
-        forceMaxQuality = !forceMaxQuality;
-        if (forceMaxQuality) {
-          targetScale = getForcedScale();
-          renderScale = targetScale;
+
+      // 1. Track secret typed word (e.g. "fps") to toggle the Perf HUD on PC
+      if (k.length === 1) {
+        keyBuffer = (keyBuffer + k).slice(-SECRET_HUD_CODE.length);
+        if (keyBuffer === SECRET_HUD_CODE) {
+          setPerfHudVisible(!showPerfHud);
+          keyBuffer = "";
+          return;
         }
+      }
+
+      if (k === "c") triggerShiftAndWild();
+
+      // 2. 'Q' only toggles max quality if the Perf HUD is currently enabled
+      if (k === "q" && showPerfHud) {
+        toggleMaxQualityMode();
       }
     });
 
@@ -236,8 +334,31 @@
           }).catch(console.error);
       }
 
+      // Only trigger on left-click (button 0) or touch tap, ignoring right-click context menus
+      if (e.button !== undefined && e.button !== 0) return;
+
+      // Ignore clicks on the HUD itself or on interactive links/buttons
+      if (e.target === perfHud || (e.target && e.target.closest && e.target.closest("a, button, input, textarea, select"))) return;
+
       const travel = Math.abs(e.clientX - pressX) + Math.abs(e.clientY - pressY);
-      if (travel < 15) toggleColor(); 
+      if (travel < 15) {
+        // Secret 5-tap zone in the top-left corner (100x100px) for Phone & PC
+        if (e.clientX < 100 && e.clientY < 100) {
+          const nowMs = performance.now();
+          cornerTapCount = (nowMs - lastCornerTapTime < 600) ? cornerTapCount + 1 : 1;
+          lastCornerTapTime = nowMs;
+
+          if (cornerTapCount >= SECRET_CORNER_TAPS) {
+            setPerfHudVisible(!showPerfHud);
+            cornerTapCount = 0;
+            return; // Don't trigger color shift on the 5th unlock tap
+          }
+        } else {
+          cornerTapCount = 0;
+        }
+
+        triggerShiftAndWild();
+      }
     });
 
     // 3. Gyroscope Translation Logic
@@ -266,10 +387,11 @@
     });
     // -----------------------------------------------------------------------
 
-    // --- sizing ---
+    // --- sizing & continuous quality ---
     context.configure({ device, format, alphaMode: "premultiplied" });
     
-    let currentQuality = 0; 
+    let currentQuality = forceMaxQuality ? 2.0 : 0.0;
+    let targetQuality = currentQuality;
     let lastBlur = -1;
 
     function applySize() {
@@ -280,22 +402,26 @@
       canvas.height = h;
     }
 
-    function applyVisual() {
+    function applyVisual(dt = 0.016) {
+      const t = Math.min(1.0, Math.max(0.0, (renderScale - activeConfig.minScale) / Math.max(1e-4, (maxScale - activeConfig.minScale))));
+      
       if (forceMaxQuality) {
-        currentQuality = 2;
+        targetQuality = 2.0;
+      } else if (reduce) {
+        targetQuality = 0.5;
+      } else {
+        targetQuality = t * 2.0; // Continuous 0.0 -> 2.0 float instead of discrete integer steps
+      }
+
+      // Smoothly interpolate currentQuality so shader elements fade/grow in gently
+      currentQuality += (targetQuality - currentQuality) * Math.min(1.0, GLOBAL_SETTINGS.qualityLerp * dt);
+
+      if (reduce || forceMaxQuality) {
         if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
         return;
       }
-
-      const t = (renderScale - activeConfig.minScale) / Math.max(1e-4, (maxScale - activeConfig.minScale));
-      currentQuality = t < 0.34 ? 0 : (t < 0.67 ? 1 : 2);
-
-      if (reduce) {
-        if (lastBlur !== 0) { canvas.style.filter = "blur(0px)"; lastBlur = 0; }
-        return;
-      }
-      const blur = GLOBAL_SETTINGS.maxBlur * (1 - Math.min(1, Math.max(0, t)));
-      if (Math.abs(blur - lastBlur) >= 0.3) {
+      const blur = GLOBAL_SETTINGS.maxBlur * (1.0 - Math.min(1.0, currentQuality * 0.5));
+      if (Math.abs(blur - lastBlur) >= 0.15) {
         canvas.style.filter = `blur(${blur.toFixed(2)}px)`;
         lastBlur = blur;
       }
@@ -312,7 +438,7 @@
     }
     window.addEventListener("resize", onResize);
     onResize();
-    applyVisual();
+    applyVisual(0.0);
 
     // --- adaptive governor & HUD updater ---
     let frameMs = [];
@@ -322,13 +448,14 @@
       const maxSpike = Math.max(...frameMs);
       frameMs.length = 0;
 
-      if (perfHud) {
+      if (showPerfHud) {
         const fps = 1000.0 / Math.max(0.001, avg);
-        const modeLabel = forceMaxQuality ? "LOCKED MAX (Press Q)" : "ADAPTIVE (Press Q)";
+        const scalePct = Math.round(renderScale * 100);
+        const modeLabel = forceMaxQuality ? "LOCKED MAX (Q / Tap)" : "ADAPTIVE (Q / Tap)";
         perfHud.textContent =
           `FPS:     ${fps.toFixed(1)} (${avg.toFixed(2)} ms | max ${maxSpike.toFixed(1)} ms)\n` +
-          `Res:     ${canvas.width}x${canvas.height} (scale ${(renderScale * 100).toFixed(0)}%)\n` +
-          `Quality: Tier ${currentQuality} [${modeLabel}]`;
+          `Res:     ${canvas.width}x${canvas.height} (scale ${scalePct}%)\n` +
+          `Quality: ${currentQuality.toFixed(2)} / 2.00 [${modeLabel}]`;
       }
 
       if (forceMaxQuality) {
@@ -361,12 +488,12 @@
       governor();
 
       if (forceMaxQuality) {
-        renderScale = getForcedScale();
+        renderScale += (getForcedScale() - renderScale) * Math.min(1, GLOBAL_SETTINGS.scaleLerp * dt);
       } else {
         renderScale += (targetScale - renderScale) * Math.min(1, GLOBAL_SETTINGS.scaleLerp * dt);
       }
       applySize();
-      applyVisual();
+      applyVisual(dt);
 
       let speed = inputState.spinInput * GLOBAL_SETTINGS.spinSpeed;
       if (speed >= 0 && speed < GLOBAL_SETTINGS.minSpin) speed = GLOBAL_SETTINGS.minSpin;

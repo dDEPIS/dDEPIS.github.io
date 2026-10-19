@@ -1,5 +1,9 @@
+// Copyright (c) 2026 depis. All Rights Reserved.
+// Unauthorized commercial use, redistribution, or reproduction is prohibited.
+
 // Mirrors the 32-byte buffer written from JS. color_t is the red<->white
-// crossfade; quality is the device tier (0 low / 1 medium / 2 high).
+// crossfade; quality is a continuous float (0.0 low -> 2.0 high);
+// click_time is the timestamp (in seconds) of the last left-click/tap.
 struct Uniforms {
   resolution: vec2f,
   time: f32,
@@ -7,7 +11,7 @@ struct Uniforms {
   yaw: f32,
   pitch: f32,
   quality: f32,
-  _pad: f32,
+  click_time: f32,
 }
 
 @group(0) @binding(0) var<uniform> uniforms: Uniforms;
@@ -25,7 +29,7 @@ const ENABLE_CREVICE_TENTACLES = true; // Rising green tentacles sprouting from 
 const ENABLE_ROOT_NETWORK      = true; // Heightmap root arteries and web on the ground
 const ENABLE_SHADOWS           = true; // Soft shadow raymarch pass
 const ENABLE_VOLUMETRIC_GLOW   = true; // Per-step glow accumulation in the raymarch loop
-const ENABLE_WILD_EVENT        = true; // Periodic monster tentacle, rose frenzy & brick-alignment event
+const ENABLE_WILD_EVENT        = true; // Click-triggered monster tentacle, rose frenzy & brick-alignment event
 
 // Ground & Brick Sub-Features
 const ENABLE_TEXTURED_GROUND   = true; // Master switch for brick geometry & materials
@@ -33,19 +37,32 @@ const ENABLE_GROUND_BBOX_OPT   = true; // Skips brick/root heightmap math when r
 const ENABLE_BRICK_WARP        = true; // 2x noise2D domain warping for irregular brick shapes
 const ENABLE_BRICK_CHIPS       = true; // 2x noise2D inward edge chipping
 const ENABLE_BRICK_HOLES       = true; // 2x noise2D surface pits/craters on brick tops
-const ENABLE_GROUND_FBM_MAT    = true; // 3x 4-octave FBM noise for moss/dirt/rock color blending
+const ENABLE_GROUND_FBM_MAT    = true; // FBM noise for moss/dirt/rock color blending
+const ENABLE_CREVICE_GLOW      = true; // Subtle emissive glow inside the crevices between bricks
+
+// Smooth Quality Fade Ranges (uniforms.quality smoothly glides between 0.0 and 2.0)
+const QUALITY_FADE_SHADOWS     = vec2f(0.15, 0.85); // Shadows fade in between 0.15 and 0.85
+const QUALITY_FADE_PETAL_FX    = vec2f(0.15, 0.80); // Petal floor lights/shadows fade in between 0.15 and 0.80
+const QUALITY_FADE_ROOTS       = vec2f(0.20, 0.90); // Ground roots grow & fade in between 0.20 and 0.90
+const QUALITY_FADE_MAT_DETAIL  = vec2f(0.20, 1.10); // Dirt/moss FBM detail fades in between 0.20 and 1.10
+const QUALITY_FADE_BRICK_MICRO = vec2f(0.80, 1.55); // Brick chips & surface holes indent between 0.80 and 1.55
+const QUALITY_FADE_TENTACLES   = vec2f(0.85, 1.65); // Small green tentacles sprout upward between 0.85 and 1.65
 
 // ---------------------------------------------------------------------------
 // Tunables. Anything worth poking at lives up here.
 // ---------------------------------------------------------------------------
 
-// Falling Petal Point Lights on the Floor
-const PETAL_FLOOR_LIGHT_INTENSITY = 2.2;  // Strength of the point lights cast by falling petals (was 1.5)
-const PETAL_FLOOR_LIGHT_RADIUS    = 0.42; // Radius of the point light glow on the bricks (was 0.35)
+// Volumetric Glow, Flower Halo & Crevice Glow Tunables
+const GLOW_GENERAL_STRENGTH       = 1.25; // Master multiplier for all volumetric glow (petals, thorns, tentacles)
+const GLOW_ROSE_HALO_STRENGTH     = 1.85; // Extra multiplier specifically for the rose head bounding-sphere halo
+const GLOW_RED_MODE_BOOST         = 2.60; // Boosts volumetric glow when red so red halos/dissolves pop like white
+const CREVICE_GLOW_STRENGTH       = 0.38; // Emissive glow strength inside the mortar grooves between bricks
+const PETAL_FLOOR_LIGHT_INTENSITY = 2.20; // Strength of the point lights cast by falling petals on the floor
+const PETAL_FLOOR_RED_BOOST       = 2.80; // Extra intensity boost when the floor point light is red
+const PETAL_FLOOR_LIGHT_RADIUS    = 0.36; // Radius of the point light glow on the bricks
 
-// Wild Event Tunables
-const WILD_EVENT_PERIOD        = 20.0; // Seconds between each wild event cycle
-const WILD_EVENT_DURATION      = 6.0;  // How many seconds the event takes to ramp up, peak, and fade
+// Click-Triggered Wild Event Tunables
+const WILD_EVENT_DURATION      = 2.4;  // How many seconds the wild event lasts after left-clicking
 const WILD_TENTACLE_THIN_MULT  = 0.70; // Slight thinning multiplier for tentacles during the event
 const WILD_HOLE_WRITHE_MULT    = 2.2;  // Thrashing multiplier for the visible rose-hole tentacles
 const WILD_CREVICE_SWAY_MULT   = 2.1;  // Thrashing multiplier for the visible green root tentacles
@@ -65,9 +82,8 @@ const SURF_EPS   = 0.0012;  // distance that counts as a hit
 const MAX_DIST   = 20.0;    // bail once a ray gets this far out
 const NORMAL_EPS = 0.002;   // sample spread for the shading normal
 
-// Per-tier step budgets.
-const STEPS_LOW    : i32 = 140;
-const STEPS_MEDIUM : i32 = 165;
+// Per-tier step budgets (interpolated smoothly by uniforms.quality).
+const STEPS_LOW    : i32 = 125;
 const STEPS_HIGH   : i32 = 185;
 const SHADOW_STEPS : i32 = 16;
 
@@ -144,20 +160,48 @@ const CREVICE_DOMAIN_SIZE      = 0.4;   // Size of the repetition grid
 const CREVICE_SHIFT_AMOUNT     = 0.8;   // How far they can wander from the cell center (0.0 to 1.0)
 const CREVICE_MAX_HEIGHT       = 0.75;  // Base height they can grow to
 
-// The falling petals, their floor glow, and generally heavier extras only
-// kick in at medium quality and above. Low-end devices skip them entirely.
-fn extras_enabled() -> bool {
-    return uniforms.quality >= 0.5;
+// ---------------------------------------------------------------------------
+// Smooth Quality Fade Helpers (0.0 -> 1.0)
+// ---------------------------------------------------------------------------
+fn getShadowFade() -> f32 {
+    if (!ENABLE_SHADOWS) { return 0.0; }
+    return smoothstep(QUALITY_FADE_SHADOWS.x, QUALITY_FADE_SHADOWS.y, uniforms.quality);
 }
 
-// Smooth 0.0 -> 1.0 -> 0.0 envelope for the periodic wild event
+fn getPetalFxFade() -> f32 {
+    if (!ENABLE_PETAL_FLOOR_FX) { return 0.0; }
+    return smoothstep(QUALITY_FADE_PETAL_FX.x, QUALITY_FADE_PETAL_FX.y, uniforms.quality);
+}
+
+fn getRootFade() -> f32 {
+    if (!ENABLE_ROOT_NETWORK) { return 0.0; }
+    return smoothstep(QUALITY_FADE_ROOTS.x, QUALITY_FADE_ROOTS.y, uniforms.quality);
+}
+
+fn getMatDetailFade() -> f32 {
+    return smoothstep(QUALITY_FADE_MAT_DETAIL.x, QUALITY_FADE_MAT_DETAIL.y, uniforms.quality);
+}
+
+fn getBrickMicroFade() -> f32 {
+    return smoothstep(QUALITY_FADE_BRICK_MICRO.x, QUALITY_FADE_BRICK_MICRO.y, uniforms.quality);
+}
+
+fn getCreviceTentacleFade() -> f32 {
+    if (!ENABLE_CREVICE_TENTACLES || !ENABLE_ROOT_NETWORK) { return 0.0; }
+    return smoothstep(QUALITY_FADE_TENTACLES.x, QUALITY_FADE_TENTACLES.y, uniforms.quality);
+}
+
+// Click-triggered 0.0 -> 1.0 -> 0.0 envelope for the wild event
 fn getWildEventFactor(time: f32) -> f32 {
     if (!ENABLE_WILD_EVENT) { return 0.0; }
-    let cycle_t = time % WILD_EVENT_PERIOD;
-    let half_dur = WILD_EVENT_DURATION * 0.5;
-    let center = WILD_EVENT_PERIOD * 0.55;
-    let dist = abs(cycle_t - center);
-    let raw = smoothstep(half_dur, half_dur * 0.28, dist);
+    let elapsed = time - uniforms.click_time;
+    if (elapsed <= 0.0 || elapsed >= WILD_EVENT_DURATION) {
+        return 0.0;
+    }
+    // Fast 0.22s attack on click, followed by a smooth ease-out over WILD_EVENT_DURATION
+    let attack = smoothstep(0.0, 0.22, elapsed);
+    let release = smoothstep(WILD_EVENT_DURATION, WILD_EVENT_DURATION * 0.28, elapsed);
+    let raw = attack * release;
     return raw * raw * (3.0 - 2.0 * raw);
 }
 
@@ -234,7 +278,7 @@ fn sdHexagon(p_in: vec2f, r: f32) -> f32 {
 }
 
 // Returns vec3f(signed_distance, cell_id.x, cell_id.y)
-// Handles organic domain warping, unclipped Voronoi hex tiling, and inward edge chipping
+// Handles organic domain warping, unclipped Voronoi hex tiling, and smooth-fading edge chipping
 fn getBrickData(p_xz: vec2f) -> vec3f {
     var warped_xz = p_xz;
     let wild = getWildEventFactor(uniforms.time);
@@ -281,12 +325,13 @@ fn getBrickData(p_xz: vec2f) -> vec3f {
         d = sdHexagon(local_p, r) - BRICK_CORNER_RADIUS;
     }
 
-    // 2. High-frequency inward edge chipping (only evaluated near brick edges where it affects bevel/mortar)
-    if (ENABLE_BRICK_CHIPS && abs(d) < 0.09) {
+    // 2. High-frequency inward edge chipping: smoothly indents as quality rises
+    let micro_fade = getBrickMicroFade();
+    if (ENABLE_BRICK_CHIPS && micro_fade > 0.001 && abs(d) < 0.09) {
         let n1 = noise2D(p_xz * BRICK_CHIP_FREQ);
         let n2 = noise2D(p_xz * BRICK_CHIP_FREQ * 2.17 + vec2f(31.4, 15.9));
         let chip_noise = smoothstep(0.25, 0.85, n1 * 0.65 + n2 * 0.35);
-        d += chip_noise * BRICK_CHIP_AMOUNT;
+        d += chip_noise * BRICK_CHIP_AMOUNT * micro_fade;
     }
 
     return vec3f(d, cell_id.x, cell_id.y);
@@ -296,12 +341,24 @@ fn getBrickDistance(p_xz: vec2f) -> f32 {
     return getBrickData(p_xz).x;
 }
 
+// Continuity-preserving FBM: higher octaves smoothly blend in from the noise mean (0.48)
+// so moss/dirt patches never jump or shift position when quality changes.
 fn fbm(p: vec2f) -> f32 {
     var f = 0.0;
     var uv = p;
     var amp = 0.5;
+    let q = uniforms.quality;
+
     for (var i = 0; i < 4; i++) {
-        f += amp * noise2D(uv);
+        // Octave 0 is always active; octaves 1..3 smoothly fade in as quality increases
+        let octave_start = f32(i - 1) * 0.45 + 0.1;
+        let w = select(smoothstep(octave_start, octave_start + 0.5, q), 1.0, i == 0);
+
+        if (w > 0.001) {
+            f += amp * mix(0.48, noise2D(uv), w);
+        } else {
+            f += amp * 0.48;
+        }
         uv *= 2.0;
         amp *= 0.5;
     }
@@ -330,12 +387,13 @@ fn getRootDistance2D(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
 fn getRootLocalWidth(r: f32) -> f32 {
     let inner_fade = smoothstep(4.5, 4.0, r);
     let outer_fade = smoothstep(VINES_MAX_RADIUS, VINES_MAX_RADIUS - 2.0, r);
-    return ROOT_THICKNESS * (0.5 + 0.5 * inner_fade) * outer_fade;
+    let root_fade = getRootFade();
+    return ROOT_THICKNESS * (0.5 + 0.5 * inner_fade) * outer_fade * smoothstep(0.0, 0.6, root_fade);
 }
 
 // Continuous, loop-free heightmap root network radiating from the center rose
-fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
-    if (r >= VINES_MAX_RADIUS) { return 0.0; }
+fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32, root_fade: f32) -> f32 {
+    if (r >= VINES_MAX_RADIUS || root_fade <= 0.001) { return 0.0; }
     let d_roots = getRootDistance2D(p_xz, r, a, time);
     let width = getRootLocalWidth(r);
 
@@ -344,13 +402,15 @@ fn getRootHeight(p_xz: vec2f, r: f32, a: f32, time: f32) -> f32 {
     let profile = (1.0 - norm_d * norm_d);
     let outer_fade = smoothstep(VINES_MAX_RADIUS, VINES_MAX_RADIUS - 2.0, r);
 
-    return profile * profile * ROOT_HEIGHT * outer_fade;
+    return profile * profile * ROOT_HEIGHT * outer_fade * root_fade;
 }
 
-// Small, chaotic tentacles that sprout directly from the root network and inherit its thickness
-fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32) -> vec2f {
-    // Fast bounding plane: skip the 2x2 loop completely when the ray is above the tentacles
-    let max_y = -0.5 + CREVICE_MAX_HEIGHT + 0.15;
+// Small, chaotic tentacles that sprout directly from the root network and smoothly grow with quality
+fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32, crevice_fade: f32) -> vec2f {
+    let current_max_h = CREVICE_MAX_HEIGHT * crevice_fade;
+
+    // Fast bounding plane: skip the 2x2 loop completely when the ray is above the current tentacle height
+    let max_y = -0.5 + current_max_h + 0.15;
     if (p.y > max_y) {
         return vec2f(p.y - max_y + 0.1, MAT_LEAVES);
     }
@@ -429,8 +489,8 @@ fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32) -> vec2f {
                     // Anchor base at y = -0.5 so it merges cleanly out of the root ridges
                     var q = vec3f(p.x - root_xz.x, p.y - (-0.5), p.z - root_xz.y);
 
-                    // Keep the exact original height so no new/taller tentacles spawn
-                    let max_h = CREVICE_MAX_HEIGHT * final_growth * (0.4 + seed1 * 0.6);
+                    // Height scales smoothly with crevice_fade so tentacles sprout upward instead of popping in
+                    let max_h = current_max_h * final_growth * (0.4 + seed1 * 0.6);
                     let h = clamp(q.y, 0.0, max_h);
 
                     // Calm sway vs. frenzied high-frequency thrashing on existing tentacles
@@ -445,9 +505,10 @@ fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32) -> vec2f {
 
                     let core = vec3f(sway_x, h, sway_z);
                     
-                    // Inherit root thickness, narrowing slightly during the wild event
-                    let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, WILD_TENTACLE_THIN_MULT, wild);
-                    let thickness = inherited_base_r * (1.0 - (h / max_h));
+                    // Inherit root thickness, tapering in smoothly with crevice_fade
+                    let thick_fade = smoothstep(0.0, 0.4, crevice_fade);
+                    let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, WILD_TENTACLE_THIN_MULT, wild) * thick_fade;
+                    let thickness = inherited_base_r * (1.0 - (h / max(max_h, 0.0001)));
                     let d = length(q - core) - thickness;
 
                     if (d < d_min) {
@@ -476,14 +537,15 @@ fn getGroundHeight(p_xz: vec2f) -> f32 {
     let brick_var = 1.0 + (hash12(brick_id + vec2f(7.1, 19.3)) - 0.5) * BRICK_HEIGHT_VAR;
     height_mask *= brick_var;
 
-    // 2. Surface craters and pits etched into the top of the bricks (skipped when in mortar where height_mask == 0)
-    if (ENABLE_BRICK_HOLES && height_mask > 0.001) {
+    // 2. Surface craters and pits etched into the top of the bricks: depth scales smoothly with micro_fade
+    let micro_fade = getBrickMicroFade();
+    if (ENABLE_BRICK_HOLES && micro_fade > 0.001 && height_mask > 0.001) {
         let pit_n1 = noise2D(p_xz * BRICK_HOLE_FREQ + vec2f(12.3, 45.6));
         if (pit_n1 > 0.38) {
             let pit_n2 = noise2D(p_xz * BRICK_HOLE_FREQ * 2.3 + vec2f(67.8, 23.4));
             let holes = smoothstep(0.58, 0.88, pit_n1 * 0.7 + pit_n2 * 0.3);
             let hole_mask = holes * smoothstep(0.0, 0.4, height_mask);
-            height_mask = max(0.0, height_mask - hole_mask * BRICK_HOLE_DEPTH);
+            height_mask = max(0.0, height_mask - hole_mask * BRICK_HOLE_DEPTH * micro_fade);
         }
     }
 
@@ -712,8 +774,8 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
 
             let local_time = (time + seed * 20.0) % cycle_duration;
 
-            let virtual_drop_y = start_h - (local_time * speed);
-            let ground_y = -0.45;
+           let virtual_drop_y = start_h - (local_time * speed);
+            let ground_y = -0.40; // Raised from -0.45 so petals land slightly higher above the bricks
             let ground_dist = virtual_drop_y - ground_y;
 
             let size = 0.1 + seed * 0.04;
@@ -746,10 +808,10 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
                 continue;
             }
 
-            var dissolve_progress = smoothstep(12.0, 19.0, local_time);
+           let dissolve_progress = smoothstep(12.0, 19.0, local_time);
             let resting_dist = max(0.0, actual_y - ground_y);
 
-            let target_rot_x = 1.57;
+            let target_rot_x = 1.570796;
             let target_rot_z = 0.0;
 
             let rot_x = target_rot_x - (resting_dist * (2.5 + seed));
@@ -758,8 +820,10 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
             let fall_progress = start_h - actual_y;
             let rot_y = fall_progress * 1.5 + seed * 20.0;
 
-            q = opRotateX(q, rot_x);
+            // 1. Rotate around World Y first (horizontal spin)
             q = opRotateY(q, rot_y);
+            // 2. Pitch and Roll in the air; as resting_dist -> 0, rot_x -> 90 deg and rot_z -> 0 (lands flat)
+            q = opRotateX(q, rot_x);
             q = opRotateZ(q, rot_z);
 
             let local_q = q / size;
@@ -767,25 +831,27 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
 
             let noise = (sin(local_q.x * 6.0) * sin(local_q.y * 9.0) * sin(local_q.z * 2.0)) * 0.5 + 0.5;
 
-            let hole_size = dissolve_progress * 1.4;
+            // Start hole_size at -rim_thickness so opposite-color noise spots first appear and grow on the intact petal,
+            // then cross d_holes = 0.0 to eat away the center of the glowing spots without ever flipping back to petal color.
+            let rim_thickness = 0.12;
+            let hole_size = mix(-rim_thickness, 1.25, dissolve_progress);
             let d_holes = (1.0 - noise) - hole_size;
 
-            let d = max(d_base, -d_holes * size * 0.15) * 0.6;
+            let d = select(
+                d_base * 0.6,
+                max(d_base, -d_holes * size * 0.45) * 0.6,
+                dissolve_progress > 0.0
+            );
 
             if (d < d_min) {
                 d_min = d;
 
-                if (dissolve_progress > 0.0) {
-                    let rim_thickness = 0.05;
-
-                    if (d_holes < rim_thickness) {
-                        let glow_intensity = smoothstep(rim_thickness, 0.0, abs(d_holes));
-                        final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.0, 0.99);
-                    } else {
-                        let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
-                        let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
-                        final_mat = MAT_FALLING_PETAL + gradient;
-                    }
+                if (dissolve_progress > 0.0 && d_holes < rim_thickness) {
+                    // max(d_holes, 0.0) keeps the eating edge locked at 1.0 (opposite color) instead of reverting to petal color
+                    let edge_ramp = smoothstep(rim_thickness, 0.0, max(d_holes, 0.0));
+                    let air_fade = smoothstep(-0.30, -0.05, d_holes);
+                    let glow_intensity = edge_ramp * air_fade;
+                    final_mat = MAT_DISSOLVE + clamp(glow_intensity, 0.001, 0.99);
                 } else {
                     let dist_from_root = max(length(q + vec3f(0.0, 0.13, 0.0)) - 0.02, 0.0);
                     let gradient = clamp(dist_from_root * 8.0, 0.0, 0.99);
@@ -930,8 +996,8 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
 
     var d_leaf = 100.0;
 
-    // Leaves reach at most 0.38 from the stem axis; culling at 0.46 saves 75% of leaf evaluations
-    if (dist_to_stem < 0.46) {
+    // Full 0.85 radius so leaf tips are never cut off
+    if (dist_to_stem < 0.85) {
         let leaf_density = 4.5;
         let id = floor(h * leaf_density);
 
@@ -1136,18 +1202,19 @@ fn map(p_in: vec3f) -> vec2f {
 
     // When ENABLE_GROUND_BBOX_OPT is true, skip expensive brick/root heightmap noise when ray is high above the floor
     let evaluate_ground_detail = !ENABLE_GROUND_BBOX_OPT || (p.y < -0.35);
+    let root_fade = getRootFade();
 
     if (ENABLE_TEXTURED_GROUND && evaluate_ground_detail) {
         // Add brick height, fading it out smoothly as it enters the center hole
         ground_height += getGroundHeight(p.xz) * (1.0 - hole_mask);
 
-        // Add the continuous heightmap root network directly onto the ground height (within VINES_MAX_RADIUS)
-        if (ENABLE_ROOT_NETWORK && r < VINES_MAX_RADIUS) {
-            let root_h = getRootHeight(p.xz, r, a, time) * (1.0 - hole_mask * 0.5);
+        // Add the continuous heightmap root network directly onto the ground height, fading in smoothly with quality
+        if (root_fade > 0.001 && r < VINES_MAX_RADIUS) {
+            let root_h = getRootHeight(p.xz, r, a, time, root_fade) * (1.0 - hole_mask * 0.5);
             ground_height += root_h;
-            if (root_h > 0.002) {
-                mat = MAT_LEAVES;
-            }
+            // Pack smooth root color blend into the fractional part of MAT_GROUND so roots fade in without hard edges
+            let root_color_blend = clamp(smoothstep(0.0005, 0.005, root_h) * root_fade, 0.0, 0.99);
+            mat = MAT_GROUND + root_color_blend;
         }
     }
 
@@ -1184,9 +1251,10 @@ fn map(p_in: vec3f) -> vec2f {
         }
     }
 
-    // Upward tentacles connected to the root network (smoothly limited to VINES_MAX_RADIUS)
-    if (ENABLE_TEXTURED_GROUND && ENABLE_ROOT_NETWORK && ENABLE_CREVICE_TENTACLES && r < VINES_MAX_RADIUS + 0.5) {
-        let mini_tentacles = sdCreviceTentacles(p, time, res.x);
+    // Upward tentacles connected to the root network: sprout smoothly upward as quality rises
+    let crevice_fade = getCreviceTentacleFade();
+    if (ENABLE_TEXTURED_GROUND && crevice_fade > 0.001 && r < VINES_MAX_RADIUS + 0.5) {
+        let mini_tentacles = sdCreviceTentacles(p, time, res.x, crevice_fade);
         if (mini_tentacles.x < res.x) {
             res = mini_tentacles;
         }
@@ -1232,34 +1300,34 @@ fn map_shadow(p: vec3f) -> f32 {
     return d_tentacles;
 }
 
-// penumbra shadows, marched against map_shadow
+// penumbra shadows, marched against map_shadow and faded smoothly by quality
 fn softshadow(ro: vec3f, rd: vec3f, mint: f32, tmax: f32, k: f32) -> f32 {
-    if (!ENABLE_SHADOWS) {
+    let shadow_fade = getShadowFade();
+    if (shadow_fade <= 0.001) {
         return 1.0;
     }
     var res = 1.0;
     var t = mint;
     var ph = 1e20;
-    if (extras_enabled()) {
-        for (var i = 0; i < SHADOW_STEPS; i++) {
-            let sample_p = ro + rd * t;
-            // Once the shadow ray climbs above the middle tentacles (y > 1.65), it has clear sky to the light
-            if (sample_p.y > 1.65) { break; }
+    for (var i = 0; i < SHADOW_STEPS; i++) {
+        let sample_p = ro + rd * t;
+        // Once the shadow ray climbs above the middle tentacles (y > 1.65), it has clear sky to the light
+        if (sample_p.y > 1.65) { break; }
 
-            let h = map_shadow(sample_p);
+        let h = map_shadow(sample_p);
 
-            let y = h * h / (2.0 * ph);
-            let d = sqrt(max(0.0, h * h - y * y));
-            res = min(res, k * d / max(0.0, t - y));
+        let y = h * h / (2.0 * ph);
+        let d = sqrt(max(0.0, h * h - y * y));
+        res = min(res, k * d / max(0.0, t - y));
 
-            ph = h;
-            t += h;
+        ph = h;
+        t += h;
 
-            if (res < 0.001 || t > tmax) { break; }
-        }
+        if (res < 0.001 || t > tmax) { break; }
     }
     res = clamp(res, 0.0, 1.0);
-    return res * res * (3.0 - 2.0 * res);
+    let raw_shadow = res * res * (3.0 - 2.0 * res);
+    return mix(1.0, raw_shadow, shadow_fade);
 }
 
 @fragment
@@ -1293,15 +1361,17 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
     let current_rose_color = mix(COLOR_RED, COLOR_WHITE, uniforms.color_t);
     let current_dissolve_color = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t);
 
+    // Boost red glow luminance whenever either color is red so both red halos and red dissolves pop
+    let rose_red_boost = mix(GLOW_RED_MODE_BOOST, 1.0, uniforms.color_t);
+    let dissolve_red_boost = mix(1.0, GLOW_RED_MODE_BOOST, uniforms.color_t);
+    let glow_rose_color = current_rose_color * rose_red_boost * GLOW_GENERAL_STRENGTH;
+    let glow_dissolve_color = current_dissolve_color * dissolve_red_boost * GLOW_GENERAL_STRENGTH;
+
     var accumulated_glow = vec3f(0.0, 0.0, 0.0);
 
-    // Cheaper devices march fewer steps.
-    var max_steps = STEPS_HIGH;
-    if (uniforms.quality < 0.5) {
-        max_steps = STEPS_LOW;
-    } else if (uniforms.quality < 1.5) {
-        max_steps = STEPS_MEDIUM;
-    }
+    // Smoothly interpolate step budget between STEPS_LOW and STEPS_HIGH
+    let quality_01 = clamp(uniforms.quality * 0.5, 0.0, 1.0);
+    let max_steps = i32(mix(f32(STEPS_LOW), f32(STEPS_HIGH), quality_01));
 
     for (var i = 0; i < max_steps; i++) {
         let p = ro + rd * t;
@@ -1313,18 +1383,22 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
             let mat_base = floor(mat_id);
             let mat_frac = fract(mat_id);
 
-            if (mat_base == MAT_ROSE || mat_base == MAT_THORNS) {
-                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0));
+            if (mat_base == MAT_ROSE) {
+                // Flower head & bounding-sphere halo (boosted by GLOW_ROSE_HALO_STRENGTH)
+                let is_halo_shell = select(1.0, GLOW_ROSE_HALO_STRENGTH, mat_frac < 0.001);
+                accumulated_glow += glow_rose_color * is_halo_shell * (0.0008 / (0.01 + d * d * 10.0));
+            } else if (mat_base == MAT_THORNS) {
+                accumulated_glow += glow_rose_color * (0.0008 / (0.01 + d * d * 10.0));
             } else if (mat_base == MAT_FALLING_PETAL) {
                 // Falling petals lose their volumetric glow as they turn black during the wild event
-                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 10.0)) * (1.0 - wild);
+                accumulated_glow += glow_rose_color * (0.0008 / (0.01 + d * d * 10.0)) * (1.0 - wild);
             } else if (mat_base == MAT_TENTACLE) {
-                let strand_color = mix(current_rose_color, current_dissolve_color, mat_frac);
+                let strand_color = mix(glow_rose_color, glow_dissolve_color, mat_frac);
                 accumulated_glow += strand_color * (0.0008 / (0.01 + d * d * 20.0));
             } else if (mat_base == MAT_DISSOLVE) {
-                accumulated_glow += current_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac * (1.0 - wild);
+                accumulated_glow += glow_dissolve_color * (0.0008 / (0.01 + d * d * 5.0)) * mat_frac * (1.0 - wild);
             } else if (mat_base == MAT_LEAVES && mat_frac > 0.0) {
-                accumulated_glow += current_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
+                accumulated_glow += glow_rose_color * (0.0008 / (0.01 + d * d * 14.0)) * mat_frac;
             }
         }
 
@@ -1381,25 +1455,29 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 var block_albedo = mix(COLOR_ROCK, COLOR_STONE2, is_stone2);
                 var block_roughness = MAT_PROP_ROCK.x;
                 var block_spec = MAT_PROP_ROCK.y;
-                var n_detail = 0.5;
+                var n_detail = 0.48;
 
                 if (ENABLE_GROUND_FBM_MAT) {
-                    // Generate FBM noise utilizing your size macros
+                    // Macro FBM smoothly fades in its higher octaves via fbm()
                     let n = fbm(p.xz * NOISE_MACRO_SCALE);
-                    n_detail = fbm(p.xz * NOISE_DETAIL_SCALE);
-                    let n_detail_2 = fbm((p.xz + vec2f(53.5, 46.2)) * NOISE_DETAIL_SCALE);
+                    let detail_fade = getMatDetailFade();
+                    var n_detail_2 = 0.48;
+
+                    // High-frequency detail FBM only runs once detail_fade > 0, and crossfades from neutral 0.48
+                    if (detail_fade > 0.001) {
+                        n_detail = mix(0.48, fbm(p.xz * NOISE_DETAIL_SCALE), detail_fade);
+                        n_detail_2 = mix(0.48, fbm((p.xz + vec2f(53.5, 46.2)) * NOISE_DETAIL_SCALE), detail_fade);
+                    }
 
                     let moss_mask = smoothstep(0.5, 1.0, n + n_detail * 0.2);
                     let dirt_mask = smoothstep(0.45, 0.8, n * 3.0 - n_detail_2 * 1.9);
 
-                    // Blend Dirt
                     if (dirt_mask > 0.0) {
                         block_albedo = mix(block_albedo, COLOR_DIRT, dirt_mask);
                         block_roughness = mix(block_roughness, MAT_PROP_DIRT.x, dirt_mask);
                         block_spec = mix(block_spec, MAT_PROP_DIRT.y, dirt_mask);
                     }
 
-                    // Blend Moss
                     if (moss_mask > 0.0) {
                         block_albedo = mix(block_albedo, COLOR_MOSS * 0.7, moss_mask);
                         block_roughness = mix(block_roughness, MAT_PROP_MOSS.x, moss_mask); 
@@ -1422,18 +1500,36 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
                 albedo *= (1.0 - edge_ao * CREVICE_AO_STRENGTH);
 
                 albedo *= (0.7 + 0.3 * n_detail); // Apply high-frequency noise variation
+
+                // Subtle emissive glow inside the brick mortar crevices
+                if (ENABLE_CREVICE_GLOW) {
+                    let crevice_core = smoothstep(-0.005, BRICK_MORTAR_WIDTH * 0.45, d);
+                    emission += current_mortar_color * crevice_core * CREVICE_GLOW_STRENGTH;
+                }
+
+                // Smoothly blend in the green surface roots (packed into mat_frac of MAT_GROUND)
+                if (mat_frac > 0.001) {
+                    let green_root_color = vec3f(0.071, 0.216, 0.118) * 0.2;
+                    albedo = mix(albedo, green_root_color, mat_frac);
+                    roughness = mix(roughness, 180.0, mat_frac);
+                    spec_power = mix(spec_power, 1.2, mat_frac);
+                    emission *= (1.0 - mat_frac);
+                }
             }
 
-            if (ENABLE_PETAL_FLOOR_FX && extras_enabled()) {
+            let petal_fx_fade = getPetalFxFade();
+            if (petal_fx_fade > 0.001) {
                 let floor_effects = getPetalFloorEffects(p, uniforms.time);
-                let shadow_amt = floor_effects.x;
-                let light_amt = floor_effects.y;
+                let shadow_amt = floor_effects.x * petal_fx_fade;
+                let light_amt = floor_effects.y * petal_fx_fade;
                 let color_shift = floor_effects.z;
 
                 albedo = albedo * (1.0 - shadow_amt);
 
-                let base_light = mix(COLOR_RED, COLOR_WHITE, uniforms.color_t);
-                let dissolve_light = mix(COLOR_WHITE, COLOR_RED, uniforms.color_t);
+                // Boost red point lights via PETAL_FLOOR_RED_BOOST so red floor glow stands out strongly
+                let boosted_red_light = COLOR_RED * PETAL_FLOOR_RED_BOOST;
+                let base_light = mix(boosted_red_light, COLOR_WHITE, uniforms.color_t);
+                let dissolve_light = mix(COLOR_WHITE, boosted_red_light, uniforms.color_t);
                 let final_glow_color = mix(base_light, dissolve_light, color_shift);
 
                 // Boosted falling petal point lights on the ground via PETAL_FLOOR_LIGHT_INTENSITY
@@ -1476,7 +1572,7 @@ fn fs_main(@builtin(position) pos: vec4f) -> @location(0) vec4f {
         } else if (abs(mat_base - MAT_DISSOLVE) < 0.1) {
             let glow_intensity = mat_frac;
             let tip_color = current_rose_color * 0.8;
-            let glow_color = current_dissolve_color * 1.5;
+            let glow_color = current_dissolve_color * dissolve_red_boost * 1.5;
 
             let normal_albedo = mix(tip_color, glow_color, glow_intensity);
             albedo = mix(normal_albedo, vec3f(0.005, 0.005, 0.005), wild);
