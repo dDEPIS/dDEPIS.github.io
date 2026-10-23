@@ -26,6 +26,8 @@ const ENABLE_FALLING_PETALS    = true; // 3D falling petals in map()
 const ENABLE_PETAL_FLOOR_FX    = true; // 2x2 petal shadows and glow on the ground
 const ENABLE_HOLE_TENTACLES    = true; // Large writhing tentacles around the center hole
 const ENABLE_CREVICE_TENTACLES = true; // Rising green tentacles sprouting from roots
+const ENABLE_TENTACLE_THORNS   = true; // Rose thorns on the large center-hole tentacles
+const ENABLE_CREVICE_THORNS    = true; // Mini thorns on the rising green root tentacles
 const ENABLE_ROOT_NETWORK      = true; // Heightmap root arteries and web on the ground
 const ENABLE_SHADOWS           = true; // Soft shadow raymarch pass
 const ENABLE_VOLUMETRIC_GLOW   = true; // Per-step glow accumulation in the raymarch loop
@@ -45,6 +47,7 @@ const QUALITY_FADE_SHADOWS     = vec2f(0.15, 0.85); // Shadows fade in between 0
 const QUALITY_FADE_PETAL_FX    = vec2f(0.15, 0.80); // Petal floor lights/shadows fade in between 0.15 and 0.80
 const QUALITY_FADE_ROOTS       = vec2f(0.20, 0.90); // Ground roots grow & fade in between 0.20 and 0.90
 const QUALITY_FADE_MAT_DETAIL  = vec2f(0.20, 1.10); // Dirt/moss FBM detail fades in between 0.20 and 1.10
+const QUALITY_FADE_THORNS      = vec2f(0.65, 1.35); // Tentacle thorns sprout outward between 0.65 and 1.35
 const QUALITY_FADE_BRICK_MICRO = vec2f(0.80, 1.55); // Brick chips & surface holes indent between 0.80 and 1.55
 const QUALITY_FADE_TENTACLES   = vec2f(0.85, 1.65); // Small green tentacles sprout upward between 0.85 and 1.65
 
@@ -60,6 +63,10 @@ const CREVICE_GLOW_STRENGTH       = 0.38; // Emissive glow strength inside the m
 const PETAL_FLOOR_LIGHT_INTENSITY = 2.20; // Strength of the point lights cast by falling petals on the floor
 const PETAL_FLOOR_RED_BOOST       = 2.80; // Extra intensity boost when the floor point light is red
 const PETAL_FLOOR_LIGHT_RADIUS    = 0.36; // Radius of the point light glow on the bricks
+
+// Tentacle Thorn Tunables
+const TENTACLE_THORN_SCALE     = 0.055; // Size of thorns on the large center-hole tentacles
+const CREVICE_THORN_SCALE      = 0.024; // Size of thorns on the smaller green root tentacles
 
 // Click-Triggered Wild Event Tunables
 const WILD_EVENT_DURATION      = 2.4;  // How many seconds the wild event lasts after left-clicking
@@ -182,6 +189,11 @@ fn getMatDetailFade() -> f32 {
     return smoothstep(QUALITY_FADE_MAT_DETAIL.x, QUALITY_FADE_MAT_DETAIL.y, uniforms.quality);
 }
 
+fn getThornFade() -> f32 {
+    if (!ENABLE_TENTACLE_THORNS && !ENABLE_CREVICE_THORNS) { return 0.0; }
+    return smoothstep(QUALITY_FADE_THORNS.x, QUALITY_FADE_THORNS.y, uniforms.quality);
+}
+
 fn getBrickMicroFade() -> f32 {
     return smoothstep(QUALITY_FADE_BRICK_MICRO.x, QUALITY_FADE_BRICK_MICRO.y, uniforms.quality);
 }
@@ -242,6 +254,20 @@ fn opRotateZ(p: vec3f, angle: f32) -> vec3f {
 fn sdCone(p: vec3f, c: vec2f, h: f32) -> f32 {
     let q = length(p.xz);
     return max(dot(c, vec2f(q, p.y)), -h - p.y);
+}
+
+// Shared thorn SDF (used by the rose stem, center tentacles, and root tentacles)
+fn sdSpine(p: vec3f) -> f32 {
+    var q = p - vec3f(0.0, 0.7, 0.0);
+
+    q.z *= 7.0;
+    q.x /= abs(q.y) * 0.7;
+    q.x -= (1.0 + q.y) * 1.5;
+
+    let h = 1.0;
+    let r = 0.15;
+
+    return sdCone(q, vec2f(r, r), h);
 }
 
 fn smin(a: f32, b: f32, k: f32) -> f32 {
@@ -416,6 +442,7 @@ fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32, crevice_fade: f32) -> ve
     }
 
     let wild = getWildEventFactor(time);
+    let thorn_fade = getThornFade() * smoothstep(0.2, 0.7, crevice_fade);
     let spacing = CREVICE_DOMAIN_SIZE;
     let cell = floor(p.xz / spacing);
     let local_p = fract(p.xz / spacing) - 0.5;
@@ -508,12 +535,37 @@ fn sdCreviceTentacles(p: vec3f, time: f32, best_d: f32, crevice_fade: f32) -> ve
                     // Inherit root thickness, tapering in smoothly with crevice_fade
                     let thick_fade = smoothstep(0.0, 0.4, crevice_fade);
                     let inherited_base_r = local_root_width * root_section_factor * TENTACLE_ROOT_THICK_MULT * mix(1.0, WILD_TENTACLE_THIN_MULT, wild) * thick_fade;
-                    let thickness = inherited_base_r * (1.0 - (h / max(max_h, 0.0001)));
-                    let d = length(q - core) - thickness;
+                    let taper_c = 1.0 - (h / max(max_h, 0.0001));
+                    let thickness = inherited_base_r * taper_c;
+                    var d = length(q - core) - thickness;
+                    var local_mat = MAT_LEAVES;
+
+                    // Fast bounded mini-thorns on the green root tentacles (only evaluated within 3.5cm of the tentacle)
+                    if (ENABLE_CREVICE_THORNS && thorn_fade > 0.001 && d < 0.035 && h > 0.04 && h < max_h * 0.88) {
+                        let c_spacing = 0.055;
+                        let c_id = floor(h / c_spacing);
+                        let local_y = (fract(h / c_spacing) - 0.5) * c_spacing;
+
+                        let t_angle = c_id * 2.4 + seed1 * 6.28318;
+                        let ca = cos(t_angle);
+                        let sa = sin(t_angle);
+                        let cross_xz = vec2f(q.x - core.x, q.z - core.z);
+                        let radial = cross_xz.x * ca + cross_xz.y * sa;
+                        let lateral = -cross_xz.x * sa + cross_xz.y * ca;
+
+                        let spine_scale = CREVICE_THORN_SCALE * (0.35 + 0.65 * taper_c) * thorn_fade;
+                        let p_s = vec3f(-local_y, radial - thickness, lateral);
+                        let d_spine = sdSpine(p_s / max(spine_scale, 0.0005)) * spine_scale;
+
+                        if (d_spine < d) {
+                            local_mat = MAT_THORNS;
+                        }
+                        d = smin(d, d_spine, 0.0025 * thorn_fade);
+                    }
 
                     if (d < d_min) {
                         d_min = d;
-                        mat_id = MAT_LEAVES;
+                        mat_id = local_mat;
                     }
                 }
             }
@@ -626,8 +678,8 @@ fn smax(a: f32, b: f32, k: f32) -> f32 {
     return mix(a, b, h) + k * h * (1.0 - h);
 }
 
-// ring of writhing tentacles around the hole (no artificial bounding circle wall so shadows stay clean!)
-fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
+// ring of writhing tentacles around the hole (with adaptive rose thorns)
+fn sdTentacles(p: vec3f, time: f32, hole_radius: f32, include_thorns: bool) -> vec2f {
     let wild = getWildEventFactor(time);
     let repetitions = 11.0;
     let angle_step = 6.28318 / repetitions;
@@ -694,7 +746,7 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
     let base_thickness = 0.06 * thin_scale * growth_factor * taper;
     let gooey_thickness = base_thickness + (muscle_lobes * 0.02 * thin_scale * taper) + (bumps * 0.005 * taper);
 
-    let d = length(q - core_line) - gooey_thickness;
+    var d = length(q - core_line) - gooey_thickness;
 
     let single_wrap = (angle_around + (twist / 3.0)) / 6.2831853;
     let lobe_id = floor(fract(single_wrap + 100.1666) * 3.0);
@@ -705,6 +757,36 @@ fn sdTentacles(p: vec3f, time: f32, hole_radius: f32) -> vec2f {
         lobe_mat = MAT_STEM;
     } else if (lobe_id == 2.0) {
         lobe_mat = MAT_TENTACLE + clamp(retract_blend, 0.0, 0.99);
+    }
+
+    // Fast bounded thorns on the tentacles: only evaluated when quality > 0.65 and ray is within 9cm of the skin
+    let thorn_fade = getThornFade();
+    if (ENABLE_TENTACLE_THORNS && include_thorns && thorn_fade > 0.001 && d < 0.09 && h > 0.12 && h < max_length * 0.92) {
+        let thorn_spacing = 0.11 * growth_factor;
+        let thorn_id = floor(h / max(thorn_spacing, 0.001));
+        let local_h = (fract(h / max(thorn_spacing, 0.001)) - 0.5) * thorn_spacing;
+
+        // Evaluate twist at the thorn's center so each thorn sits rigidly on the twisting skin
+        let h_center = (thorn_id + 0.5) * thorn_spacing;
+        let twist_center = h_center * 12.0 - time * 3.0;
+        let thorn_angle = thorn_id * 2.4 + sector * 1.7 - (twist_center / 3.0);
+
+        let ca = cos(thorn_angle);
+        let sa = sin(thorn_angle);
+        let radial = cross_section.x * ca + cross_section.y * sa;
+        let lateral = -cross_section.x * sa + cross_section.y * ca;
+
+        let lobe_at_thorn = cos(thorn_angle * 3.0 + twist_center);
+        let surface_r = base_thickness + (lobe_at_thorn * 0.02 * thin_scale * taper);
+
+        let spine_scale = TENTACLE_THORN_SCALE * growth_factor * (0.3 + 0.7 * taper) * thorn_fade;
+        let p_s = vec3f(-local_h, radial - surface_r, lateral);
+        let d_spine = sdSpine(p_s / max(spine_scale, 0.0005)) * spine_scale;
+
+        if (d_spine < d) {
+            lobe_mat = MAT_THORNS;
+        }
+        d = smin(d, d_spine, 0.006 * thorn_fade);
     }
 
     return vec2f(d * mix(0.45, 0.38, wild), lobe_mat);
@@ -774,7 +856,7 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
 
             let local_time = (time + seed * 20.0) % cycle_duration;
 
-           let virtual_drop_y = start_h - (local_time * speed);
+            let virtual_drop_y = start_h - (local_time * speed);
             let ground_y = -0.40; // Raised from -0.45 so petals land slightly higher above the bricks
             let ground_dist = virtual_drop_y - ground_y;
 
@@ -808,7 +890,7 @@ fn sdFallingPetals(p: vec3f, time: f32, best_d: f32) -> vec2f {
                 continue;
             }
 
-           let dissolve_progress = smoothstep(12.0, 19.0, local_time);
+            let dissolve_progress = smoothstep(12.0, 19.0, local_time);
             let resting_dist = max(0.0, actual_y - ground_y);
 
             let target_rot_x = 1.570796;
@@ -1037,20 +1119,6 @@ fn sdStemWithSpines(p: vec3f, a: vec3f, b: vec3f, bend: f32, r: f32) -> vec2f {
     return vec2f(fin, material);
 }
 
-// one thorn
-fn sdSpine(p: vec3f) -> f32 {
-    var q = p - vec3f(0.0, 0.7, 0.0);
-
-    q.z *= 7.0;
-    q.x /= abs(q.y) * 0.7;
-    q.x -= (1.0 + q.y) * 1.5;
-
-    let h = 1.0;
-    let r = 0.15;
-
-    return sdCone(q, vec2f(r, r), h);
-}
-
 // assembles the flower: stem, sepals, bud and rose head
 fn flower(p: vec3f, location: vec3f) -> vec2f {
     let d_sphere = length(p - vec3f(0.0, 1.0, 0.0)) - 0.45;
@@ -1135,7 +1203,7 @@ fn getPetalFloorEffects(p: vec3f, time: f32) -> vec3f {
 
             let local_time = (time + seed * 20.0) % cycle_duration;
             let virtual_drop_y = start_h - (local_time * speed);
-            let ground_y = -0.45;
+            let ground_y = -0.40;
             let ground_dist = virtual_drop_y - ground_y;
 
             if (ground_dist > -10.0 && ground_dist < 1.5) {
@@ -1245,7 +1313,7 @@ fn map(p_in: vec3f) -> vec2f {
     }
 
     if (ENABLE_HOLE_TENTACLES) {
-        let tentacles = sdTentacles(p, time, hole_size);
+        let tentacles = sdTentacles(p, time, hole_size, true);
         if (tentacles.x < res.x) {
             res = tentacles;
         }
@@ -1290,13 +1358,13 @@ fn calc_normal(p: vec3f) -> vec3f {
     );
 }
 
-// stripped-down scene for shadow rays (middle hole tentacles only)
+// stripped-down scene for shadow rays (middle hole tentacles without micro-thorns)
 fn map_shadow(p: vec3f) -> f32 {
     if (!ENABLE_HOLE_TENTACLES) {
         return 100.0;
     }
     let time = uniforms.time;
-    let d_tentacles = sdTentacles(p, time, 0.5 + sin(time * 0.3) * 0.2).x;
+    let d_tentacles = sdTentacles(p, time, 0.5 + sin(time * 0.3) * 0.2, false).x;
     return d_tentacles;
 }
 

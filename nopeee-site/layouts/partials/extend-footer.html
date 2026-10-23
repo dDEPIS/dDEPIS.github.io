@@ -280,16 +280,25 @@
     // -----------------------------------------------------------------------
     // --- INTERACTION & SECRET HUD LISTENERS ---
     // -----------------------------------------------------------------------
-    let pressX = 0, pressY = 0;
+   let pressX = 0, pressY = 0;
     let usingTilt = false;
     let keyBuffer = "";
     let cornerTapCount = 0;
     let lastCornerTapTime = 0;
 
+    const WILD_COOLDOWN_SEC = 2.5; // 2.5s lockout matches the 2.4s shader animation
+
     // Triggers both the color crossfade and the shader's wild event
     const triggerShiftAndWild = () => {
+      const now = performance.now() / 1000;
+      
+      // Prevent spamming: ignore the input if the animation is still playing
+      if (now - inputState.clickTime < WILD_COOLDOWN_SEC) {
+        return; 
+      }
+
       inputState.targetColorT = inputState.targetColorT === 0.0 ? 1.0 : 0.0;
-      inputState.clickTime = performance.now() / 1000;
+      inputState.clickTime = now;
       dismissHint();
     };
 
