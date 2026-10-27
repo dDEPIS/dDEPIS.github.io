@@ -2,91 +2,91 @@
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom">
   <channel>
     <title>Tags on DEPIS</title>
-    <link>http://localhost:58542/tags/</link>
+    <link>http://localhost:1313/tags/</link>
     <description>Recent content in Tags on DEPIS</description>
     <generator>Hugo -- gohugo.io</generator>
     <language>en</language>
     <managingEditor>ddepis.d@gmail.com (DEPIS)</managingEditor>
     <webMaster>ddepis.d@gmail.com (DEPIS)</webMaster>
     <copyright>© 2026 DEPIS</copyright>
-    <lastBuildDate>Wed, 15 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:58542/tags/index.xml" rel="self" type="application/rss+xml" />
+    <lastBuildDate>Wed, 15 Jul 2026 00:00:00 +0000</lastBuildDate><atom:link href="http://localhost:1313/tags/index.xml" rel="self" type="application/rss+xml" />
     
     <item>
       <title>Digitalartwork</title>
-      <link>http://localhost:58542/tags/digitalartwork/</link>
+      <link>http://localhost:1313/tags/digitalartwork/</link>
       <pubDate>Wed, 15 Jul 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/digitalartwork/</guid>
+      <guid>http://localhost:1313/tags/digitalartwork/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>Project</title>
-      <link>http://localhost:58542/tags/project/</link>
+      <link>http://localhost:1313/tags/project/</link>
       <pubDate>Fri, 19 Jun 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/project/</guid>
+      <guid>http://localhost:1313/tags/project/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>Audio Programming</title>
-      <link>http://localhost:58542/tags/audio-programming/</link>
+      <link>http://localhost:1313/tags/audio-programming/</link>
       <pubDate>Mon, 25 May 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/audio-programming/</guid>
+      <guid>http://localhost:1313/tags/audio-programming/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>C&#43;&#43;</title>
-      <link>http://localhost:58542/tags/c&#43;&#43;/</link>
+      <link>http://localhost:1313/tags/c&#43;&#43;/</link>
       <pubDate>Mon, 25 May 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/c&#43;&#43;/</guid>
+      <guid>http://localhost:1313/tags/c&#43;&#43;/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>DSP</title>
-      <link>http://localhost:58542/tags/dsp/</link>
+      <link>http://localhost:1313/tags/dsp/</link>
       <pubDate>Mon, 25 May 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/dsp/</guid>
+      <guid>http://localhost:1313/tags/dsp/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>JUCE</title>
-      <link>http://localhost:58542/tags/juce/</link>
+      <link>http://localhost:1313/tags/juce/</link>
       <pubDate>Mon, 25 May 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/juce/</guid>
+      <guid>http://localhost:1313/tags/juce/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>Synthesizer</title>
-      <link>http://localhost:58542/tags/synthesizer/</link>
+      <link>http://localhost:1313/tags/synthesizer/</link>
       <pubDate>Mon, 25 May 2026 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/synthesizer/</guid>
+      <guid>http://localhost:1313/tags/synthesizer/</guid>
       <description></description>
       
     </item>
     
     <item>
       <title>About Me</title>
-      <link>http://localhost:58542/tags/about-me/</link>
+      <link>http://localhost:1313/tags/about-me/</link>
       <pubDate>Mon, 01 Jan 0001 00:00:00 +0000</pubDate>
       <author>ddepis.d@gmail.com (DEPIS)</author>
-      <guid>http://localhost:58542/tags/about-me/</guid>
+      <guid>http://localhost:1313/tags/about-me/</guid>
       <description></description>
       
     </item>

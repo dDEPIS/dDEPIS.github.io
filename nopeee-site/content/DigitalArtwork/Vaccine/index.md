@@ -1,7 +1,7 @@
 ---
 title: "Vaccine"
 
-summary: "Develop a taste for the poison. "
+summary: "Develop a taste for the poison. - Work in progress "
 categories: ["digitalartwork"]
 tags: ["digitalartwork"]
 #externalUrl: ""

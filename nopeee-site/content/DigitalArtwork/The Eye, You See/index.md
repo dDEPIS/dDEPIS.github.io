@@ -1,6 +1,6 @@
 ---
 title: "The Eye, You See"
-summary: "And as the wild rose, the rose became wild. "
+summary: "Work in progress "
 categories: ["digitalartwork"]
 tags: ["digitalartwork"]
 #externalUrl: ""

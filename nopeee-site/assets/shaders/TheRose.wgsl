@@ -191,7 +191,17 @@ fn getMatDetailFade() -> f32 {
 
 fn getThornFade() -> f32 {
     if (!ENABLE_TENTACLE_THORNS && !ENABLE_CREVICE_THORNS) { return 0.0; }
-    return smoothstep(QUALITY_FADE_THORNS.x, QUALITY_FADE_THORNS.y, uniforms.quality);
+    let quality_fade = smoothstep(QUALITY_FADE_THORNS.x, QUALITY_FADE_THORNS.y, uniforms.quality);
+    if (!ENABLE_WILD_EVENT) { return quality_fade; }
+
+    let elapsed = uniforms.time - uniforms.click_time;
+    if (elapsed > 0.0 && elapsed < WILD_EVENT_DURATION) {
+        // 1. Hold at 0.0 (thorns disappear) while the tentacles thrash wildly
+        // 2. Sweep 0.0 -> 1.0 in the last 40% of the event so they pop in with the bright shine
+        let wild_pop_in = smoothstep(WILD_EVENT_DURATION *0.4, WILD_EVENT_DURATION, elapsed);
+        return quality_fade * wild_pop_in;
+    }
+    return quality_fade;
 }
 
 fn getBrickMicroFade() -> f32 {
